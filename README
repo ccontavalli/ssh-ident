@@ -1,0 +1,204 @@
+Help on module ssh:
+
+NAME
+    ssh - Wrapper around ssh to prepare ssh-agent and load identities.
+
+FILE
+    /opt/scripts/ssh-ident/sshc
+
+DESCRIPTION
+    Use this script instead of ssh. It will:
+    
+    1) Check the arguments provided to ssh and the current working
+       directory against a list of patterns defined in the
+       ~/.ssh-ident configuration file.
+    
+    2) Based on those patterns, the script will determine an ssh-agent
+       to use, and a list of keys that need to be loaded in the agent.
+    
+    3) It will then run ssh as usual, with the correct enviornment
+       variables set.
+    
+    This allows to start agents and load keys on demand, when they are
+    first needed.
+    
+    Example of use
+    ==============
+    
+    In .bashrc, I have:
+      alias ssh=/home/ccontavalli/scripts/ssh-ident
+    
+    In ~/.ssh-ident, I have:
+    
+      MATCH_PATH = [
+        (r"mod-xslt", "personal"),
+        (r"ssh-ident", "personal"),
+        (r"opt/work", "work"),
+      ]
+      
+      MATCH_ARGV = [
+        (r"cweb", "personal"),
+        (r"corp", "work"),
+      ]
+    
+      DEFAULT_IDENTITY = "personal"
+    
+    Now if I run:
+    
+      ssh corp.mywemployer.com
+    
+    ssh-ident will be invoked instead, and:
+    
+      1) check ssh argv, determine that the "work" identity has to be used.
+      2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no
+         agent, it will prepare one.
+      3) look in ~/.ssh/identities/work/* for a list of keys to load for
+         this identity. It will try to load any key that is not already
+         loaded in the agent.
+      4) finally run ssh with the environment setup such that it will
+         have access only to the agent for the identity work, and the
+         corresponding keys.
+    
+    Setting up identities
+    =====================
+    
+    To setup identities with the default parameters, you should:
+    
+    1) Create the directory where all the identities and agents
+       will be kept:
+    
+        $ mkdir -p ~/.ssh/{agents,identities}; chmod u=rwX,go= -R ~/.ssh
+    
+    2) Create identities, for example:
+    
+        $ mkdir -p ~/.ssh/identities/personal
+        $ mkdir -p ~/.ssh/identities/work
+        $ mkdir -p ~/.ssh/identities/secret
+    
+    3) Generate (or copy) keys for those identities:
+    
+        # Default keys are for my personal account
+        $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
+    
+        # Generate keys to be used for work only, rsa
+        $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/rsa-key
+    
+        ...
+    
+    Note that ssh-ident needs to access both your private and public
+    key. Note also that it identifies public keys by the .pub extension.
+    All files in your identities subdirectories will be considered keys.
+    
+    If you want to only load keys that have "key" in the name, you can
+    add in your .ssh-ident:
+    
+          PATTERN_KEYS = "*key*"
+    
+    The default is PATTERN_KEYS = "*". You could also redefine:
+    
+          DIR_IDENTITIES = "$HOME/.ssh/identities"
+          DIR_AGENTS = "$HOME/.ssh/agents"
+    
+    To point somewhere else if you desire.
+
+CLASSES
+    __builtin__.object
+        AgentManager
+        Config
+    
+    class AgentManager(__builtin__.object)
+     |  Methods defined here:
+     |  
+     |  FindUnloadedKeys(self, keys)
+     |  
+     |  GetLoadedKeys(self)
+     |  
+     |  LoadKeyFiles(self, keys)
+     |  
+     |  LoadUnloadedKeys(self, keys)
+     |  
+     |  RunSSH(self, argv)
+     |  
+     |  __init__(self, identity, config)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Static methods defined here:
+     |  
+     |  EscapeShellArguments(argv)
+     |  
+     |  GetAgentFile(path, identity)
+     |  
+     |  GetPublicKeyFingerprint(key)
+     |  
+     |  IsAgentFileValid(agentfile)
+     |  
+     |  RunShellCommand(command)
+     |  
+     |  RunShellCommandInAgent(agentfile, command)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |  
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |  
+     |  __weakref__
+     |      list of weak references to the object (if defined)
+    
+    class Config(__builtin__.object)
+     |  Methods defined here:
+     |  
+     |  Get(self, parameter)
+     |  
+     |  Load(self)
+     |  
+     |  __init__(self)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Static methods defined here:
+     |  
+     |  Expand(value)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |  
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |  
+     |  __weakref__
+     |      list of weak references to the object (if defined)
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data and other attributes defined here:
+     |  
+     |  defaults = {'BINARY_SSH': '/usr/bin/ssh', 'DEFAULT_IDENTITY': '$USER',...
+
+FUNCTIONS
+    FindIdentity(argv, config)
+        Returns the identity to use based on current directory or argv.
+        
+        Args:
+          argv: iterable of string, argv passed to this program.
+          config: instance of an object implementing the same interface as
+              the Config class.
+        
+        Returns:
+          string, the name of the identity to use.
+    
+    FindIdentityInList(elements, identities)
+        Matches a list of identities to a list of elements.
+        
+        Args:
+          elements: iterable of strings, arbitrary strings to match on.
+          identities: iterable of (string, string), with first string
+            being a regular expression, the second string being an identity.
+        
+        Returns:
+          The identity specified in identities for the first regular expression
+          matching the first element in elements.
+    
+    FindKeys(identity, config)
+    
+    main(argv)
+
+
