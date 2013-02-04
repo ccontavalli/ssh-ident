@@ -1,5 +1,57 @@
 #!/usr/bin/python
 
+"""Wrapper around ssh to prepare ssh-agent and load identities.
+
+Use this script instead of ssh. It will:
+
+1) Check the arguments provided to ssh and the current working
+   directory against a list of patterns defined in the
+   ~/.ssh-ident configuration file.
+
+2) Based on those patterns, the script will determine an ssh-agent
+   to use, and a list of keys that need to be loaded in the agent.
+
+3) It will then run ssh as usual, with the correct enviornment
+   variables set.
+
+Example of use
+==============
+
+In .bashrc, I have:
+  alias ssh=/home/ccontavalli/scripts/ssh-ident
+
+In ~/.ssh-ident, I have:
+
+  MATCH_PATH = [
+    (r"mod-xslt", "personal"),
+    (r"ssh-ident", "personal"),
+    (r"opt/work", "work"),
+  ]
+  
+  MATCH_ARGV = [
+    (r"cweb", "personal"),
+    (r"corp", "work"),
+  ]
+
+  DEFAULT_IDENTITY = "personal"
+
+Now if I run:
+
+  ssh corp.mywemployer.com
+
+ssh-ident will be invoked instead, and:
+
+  1) check ssh argv, determine that the "work" identity has to be used.
+  2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no
+     agent, it will prepare one.
+  3) look in ~/.ssh/identities/work/* for a list of keys to load for
+     this identity. It will try to load any key that is not already
+     loaded in the agent.
+  4) finally run ssh with the environment setup such that it will
+     have access only to the agent for the identity work, and the
+     corresponding keys.
+"""
+
 import glob
 import sys
 import os
