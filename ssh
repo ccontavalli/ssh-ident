@@ -14,6 +14,9 @@ Use this script instead of ssh. It will:
 3) It will then run ssh as usual, with the correct enviornment
    variables set.
 
+This allows to start agents and load keys on demand, when they are
+first needed.
+
 Example of use
 ==============
 
@@ -50,6 +53,48 @@ ssh-ident will be invoked instead, and:
   4) finally run ssh with the environment setup such that it will
      have access only to the agent for the identity work, and the
      corresponding keys.
+
+Setting up identities
+=====================
+
+To setup identities with the default parameters, you should:
+
+1) Create the directory where all the identities and agents
+   will be kept:
+
+    $ mkdir -p ~/.ssh/{agents,identities}; chmod u=rwX,go= -R ~/.ssh
+
+2) Create identities, for example:
+
+    $ mkdir -p ~/.ssh/identities/personal
+    $ mkdir -p ~/.ssh/identities/work
+    $ mkdir -p ~/.ssh/identities/secret
+
+3) Generate (or copy) keys for those identities:
+
+    # Default keys are for my personal account
+    $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
+
+    # Generate keys to be used for work only, rsa
+    $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/rsa-key
+
+    ...
+
+Note that ssh-ident needs to access both your private and public
+key. Note also that it identifies public keys by the .pub extension.
+All files in your identities subdirectories will be considered keys.
+
+If you want to only load keys that have "key" in the name, you can
+add in your .ssh-ident:
+
+      PATTERN_KEYS = "*key*"
+
+The default is PATTERN_KEYS = "*". You could also redefine:
+
+      DIR_IDENTITIES = "$HOME/.ssh/identities"
+      DIR_AGENTS = "$HOME/.ssh/agents"
+
+To point somewhere else if you desire.
 """
 
 import glob
@@ -72,7 +117,7 @@ class Config(object):
       "DIR_AGENTS": "$HOME/.ssh/agents",
 
       # How to identify key files in the identities directory.
-      "PATTERN_KEYS": "ssh*",
+      "PATTERN_KEYS": "*",
       # Complete path of full ssh binary to use.
       "BINARY_SSH": "/usr/bin/ssh",
 
@@ -148,8 +193,8 @@ def FindIdentity(argv, config):
   """
   paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
   return (
-      FindIdentityInList(paths, config.Get("MATCH_PATH")) or
       FindIdentityInList(argv, config.Get("MATCH_ARGV")) or
+      FindIdentityInList(paths, config.Get("MATCH_PATH")) or
       config.Get("DEFAULT_IDENTITY"))
 
 def FindKeys(identity, config):
@@ -158,9 +203,15 @@ def FindKeys(identity, config):
 
   found = collections.defaultdict(dict)
   for key in keyfiles:
-    for value in ("private", "public"):
-      if value in key:
-        found[key.replace(value, "")][value] = key
+    kinds = (
+        ("private", "priv"),
+        ("public", "pub"),
+        (".pub", "pub"),
+        ("", "priv"),
+    )
+    for pattern, kind in kinds:
+      if pattern in key:
+        found[key.replace(pattern, "")][kind] = key
   
   if not found:
     print "Warning: no keys found for identity %s" % identity
@@ -176,7 +227,7 @@ class AgentManager(object):
   def LoadUnloadedKeys(self, keys):
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print "Loading keys:\n    %s" % "    \n".join(toload)
+      print "Loading keys:\n    %s" % "\n    ".join(toload)
       self.LoadKeyFiles(toload)
     else:
       print "All keys already loaded"
@@ -185,16 +236,16 @@ class AgentManager(object):
     loaded = set(self.GetLoadedKeys())
     toload = set()
     for key, config in keys.iteritems():
-      if "public" not in config:
+      if "pub" not in config:
         continue
-      if "private" not in config:
+      if "priv" not in config:
         continue
 
-      fingerprint = self.GetPublicKeyFingerprint(config["public"])
+      fingerprint = self.GetPublicKeyFingerprint(config["pub"])
       if fingerprint in loaded:
         continue
 
-      toload.add(config["private"])
+      toload.add(config["priv"])
     return toload
 
   def LoadKeyFiles(self, keys):
