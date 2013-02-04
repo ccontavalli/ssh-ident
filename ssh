@@ -9,22 +9,29 @@ import subprocess
 import collections
 
 
-### How to find private / public keys.
-
-### Other static parameters.
-
 class Config(object):
   defaults = {
+      # Where to find the per-user configuration.
       "FILE_USER_CONFIG": "$HOME/.ssh-ident",
-      "DIR_IDENTITIES": "$HOME/.keys/identities",
-      "DIR_AGENTS": "$HOME/.keys/agents",
 
+      # Where to find all the identities for the user.
+      "DIR_IDENTITIES": "$HOME/.ssh/identities",
+      # Where to keep the information about each running agent.
+      "DIR_AGENTS": "$HOME/.ssh/agents",
+
+      # How to identify key files in the identities directory.
       "PATTERN_KEYS": "ssh*",
+      # Complete path of full ssh binary to use.
       "BINARY_SSH": "/usr/bin/ssh",
 
+      # Which identity to use by default if we cannot tell from
+      # the current working directory and/or argv. 
+      "DEFAULT_IDENTITY": "$USER",
+
+      # Those should really be overridden by the user. Look
+      # at the documentation for more details.
       "MATCH_PATH": [],
       "MATCH_ARGV": [],
-      "DEFAULT_IDENTITY": "$USER",
   }
 
   def __init__(self):
