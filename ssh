@@ -1,0 +1,217 @@
+#!/usr/bin/python
+
+import glob
+import sys
+import os
+import re
+import socket
+import subprocess
+import collections
+
+
+### How to find private / public keys.
+
+### Other static parameters.
+
+class Config(object):
+  defaults = {
+      "FILE_USER_CONFIG": "$HOME/.ssh-ident",
+      "DIR_IDENTITIES": "$HOME/.keys/identities",
+      "DIR_AGENTS": "$HOME/.keys/agents",
+      "BINARY_SSH": "/usr/bin/ssh",
+      "PATTERN_KEYS": "ssh*",
+  }
+
+  def __init__(self):
+    self.values = {}
+
+  def Load(self):
+    path = os.path.expanduser(os.path.expandvars(self.Get("FILE_USER_CONFIG")))
+    variables = {}
+    execfile(path, variables)
+    import gdb; gdb.set_trace()
+
+  def Get(self, parameter):
+    if parameter in self.values:
+      return self.values[parameter]
+    if parameter in self.defaults:
+      return self.values[parameter]
+
+    print >>sys.stderr, "Parameter '%s' needs to be defined in config file or defaults"
+    sys.exit(2)
+
+def FindIdentityInList(elements, identities):
+  """Matches a list of identities to a list of elements.
+
+  Args:
+    elements: iterable of strings, arbitrary strings to match on.
+    identities: iterable of (string, string), with first string
+      being a regular expression, the second string being an identity.
+
+  Returns:
+    The identity specified in identities for the first regular expression
+    matching the first element in elements.
+  """
+  for element in elements:
+    for regex, identity in identities:
+      if re.search(regex, element):
+        return identity
+  return None
+
+def FindIdentity(argv):
+  """Returns the identity to use based on current directory or argv.
+
+  Args:
+    argv: iterable of string, argv passed to this program.
+
+  Returns:
+    string, the name of the identity to use.
+  """
+  paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
+  return (
+      FindIdentityInList(paths, IDENTITY_MATCH_PATH) or
+      FindIdentityInList(argv, IDENTITY_MATCH_ARGV) or
+      IDENTITY_DEFAULT)
+
+def FindKeys(identity):
+  keyfiles = glob.glob(
+      os.path.expanduser(os.path.expandvars(
+                         os.path.join(CFG_IDENTITY_DIR, identity, CFG_KEY_PATTERN))))
+
+  found = collections.defaultdict(dict)
+  for key in keyfiles:
+    for value in ("private", "public"):
+      if value in key:
+        found[key.replace(value, "")][value] = key
+  
+  if not found:
+    print "Warning: no keys found for identity %s" % identity
+  return found 
+
+class AgentManager(object):
+  def __init__(self, identity, agents_path=AGENTS_PATH):
+    self.identity = identity
+    self.agents_path = os.path.abspath(
+        os.path.expanduser(os.path.expandvars(agents_path)))
+    self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
+
+  def LoadUnloadedKeys(self, keys):
+    toload = self.FindUnloadedKeys(keys)
+    if toload:
+      print "Loading keys:\n    %s" % "    \n".join(toload)
+      self.LoadKeyFiles(toload)
+    else:
+      print "All keys already loaded"
+
+  def FindUnloadedKeys(self, keys):
+    loaded = set(self.GetLoadedKeys())
+    toload = set()
+    for key, config in keys.iteritems():
+      if "public" not in config:
+        continue
+      if "private" not in config:
+        continue
+
+      fingerprint = self.GetPublicKeyFingerprint(config["public"])
+      if fingerprint in loaded:
+        continue
+
+      toload.add(config["private"])
+    return toload
+
+  def LoadKeyFiles(self, keys):
+    keys = " ".join(keys)
+    self.RunShellCommandInAgent(self.agent_file, "ssh-add %s" % keys)
+
+  def GetLoadedKeys(self):
+    retval, stdout = self.RunShellCommandInAgent(self.agent_file, "ssh-add -l")
+    if retval != 0:
+      return []
+
+    fingerprints = []
+    for line in stdout.split("\n"):
+      try:
+        _, fingerprint, _ = line.split(" ", 2)
+        fingerprints.append(fingerprint)
+      except ValueError:
+        continue
+    return fingerprints
+
+  @staticmethod
+  def GetPublicKeyFingerprint(key):
+    retval, stdout = AgentManager.RunShellCommand("ssh-keygen -l -f %s |tr -s ' '" % key)
+    if retval:
+      return None
+
+    try:
+      _, fingerprint, _ = stdout.split(" ", 2)
+    except ValueError:
+      return None
+    return fingerprint
+
+  @staticmethod
+  def GetAgentFile(path, identity):
+    # Use the hostname as part of the path just in case this is on NFS.
+    agentfile = os.path.join(path, "agent-%s-%s" % (identity, socket.gethostname()))
+    if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
+      print >>sys.stderr, "Agent for identity %s ready" % identity
+      return agentfile
+
+    print >>sys.stderr, "Preparing new agent for identity %s" % identity
+    retval = subprocess.call(
+        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > %s" % agentfile])
+    return agentfile
+
+  @staticmethod
+  def IsAgentFileValid(agentfile):
+    retval, output = AgentManager.RunShellCommandInAgent(agentfile, "ssh-add -l >/dev/null 2>/dev/null") 
+    if retval & 0xff not in [0, 1]:
+      print >>sys.stderr, "Agent in %s not running" % agentfile
+      return False
+    return True
+
+  @staticmethod
+  def RunShellCommand(command):
+    command = ["/bin/sh", "-c", command]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+    return process.wait(), stdout
+
+  @staticmethod
+  def RunShellCommandInAgent(agentfile, command):
+    command = ["/usr/bin/env", "-i", "/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; %s" % (agentfile, command)]
+    process = subprocess.Popen(command, stdout=subprocess.PIPE)
+    stdout, stderr = process.communicate()
+    return process.wait(), stdout
+
+  @staticmethod
+  def EscapeShellArguments(argv):
+    escaped = []
+    for arg in argv:
+      escaped.append("'%s'" % arg.replace("'", "'\"'\"'"))
+    return " ".join(escaped)
+
+  def RunSSH(self, argv):
+    command = ["/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; exec %s %s" % (
+               self.agent_file, self.SSH_PATH, self.EscapeShellArguments(argv))]
+    os.execv("/bin/sh", command) 
+
+def main(argv):
+  # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
+  # that use ssh in case we error out or similar.
+  sys.stdout = open("/dev/tty", "w")
+  sys.stderr = open("/dev/tty", "w")
+
+  config = Config().Load()
+  identity = FindIdentity(argv)
+  agent = AgentManager(identity)
+  keys = FindKeys(identity)
+
+  agent.LoadUnloadedKeys(keys)
+  return agent.RunSSH(argv[1:])
+
+if __name__ == "__main__":
+  try:
+    sys.exit(main(sys.argv))
+  except KeyboardInterrupt:
+    print >>sys.stderr, "Goodbye"
