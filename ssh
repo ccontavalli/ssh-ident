@@ -18,26 +18,44 @@ class Config(object):
       "FILE_USER_CONFIG": "$HOME/.ssh-ident",
       "DIR_IDENTITIES": "$HOME/.keys/identities",
       "DIR_AGENTS": "$HOME/.keys/agents",
-      "BINARY_SSH": "/usr/bin/ssh",
+
       "PATTERN_KEYS": "ssh*",
+      "BINARY_SSH": "/usr/bin/ssh",
+
+      "MATCH_PATH": [],
+      "MATCH_ARGV": [],
+      "DEFAULT_IDENTITY": "$USER",
   }
 
   def __init__(self):
     self.values = {}
 
   def Load(self):
-    path = os.path.expanduser(os.path.expandvars(self.Get("FILE_USER_CONFIG")))
+    path = self.Get("FILE_USER_CONFIG")
     variables = {}
-    execfile(path, variables)
-    import gdb; gdb.set_trace()
+    try: 
+      execfile(path, {}, variables)
+    except IOError:
+      print >>sys.stderr, "Warning: could not load config '%s', you might as well be using plain ssh." % path
+      return self
+    self.values = variables
+    return self
 
+  @staticmethod
+  def Expand(value):
+    if isinstance(value, str):
+      return os.path.expanduser(os.path.expandvars(value))
+    return value
+ 
   def Get(self, parameter):
     if parameter in self.values:
-      return self.values[parameter]
+      return self.Expand(self.values[parameter])
     if parameter in self.defaults:
-      return self.values[parameter]
+      return self.Expand(self.defaults[parameter])
 
-    print >>sys.stderr, "Parameter '%s' needs to be defined in config file or defaults"
+    print >>sys.stderr, (
+        "Parameter '%s' needs to be defined in "
+        "config file or defaults" % parameter)
     sys.exit(2)
 
 def FindIdentityInList(elements, identities):
@@ -58,25 +76,26 @@ def FindIdentityInList(elements, identities):
         return identity
   return None
 
-def FindIdentity(argv):
+def FindIdentity(argv, config):
   """Returns the identity to use based on current directory or argv.
 
   Args:
     argv: iterable of string, argv passed to this program.
+    config: instance of an object implementing the same interface as
+        the Config class.
 
   Returns:
     string, the name of the identity to use.
   """
   paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
   return (
-      FindIdentityInList(paths, IDENTITY_MATCH_PATH) or
-      FindIdentityInList(argv, IDENTITY_MATCH_ARGV) or
-      IDENTITY_DEFAULT)
+      FindIdentityInList(paths, config.Get("MATCH_PATH")) or
+      FindIdentityInList(argv, config.Get("MATCH_ARGV")) or
+      config.Get("DEFAULT_IDENTITY"))
 
-def FindKeys(identity):
-  keyfiles = glob.glob(
-      os.path.expanduser(os.path.expandvars(
-                         os.path.join(CFG_IDENTITY_DIR, identity, CFG_KEY_PATTERN))))
+def FindKeys(identity, config):
+  keyfiles = glob.glob(os.path.join(
+      config.Get("DIR_IDENTITIES"), identity, config.Get("PATTERN_KEYS")))
 
   found = collections.defaultdict(dict)
   for key in keyfiles:
@@ -89,10 +108,10 @@ def FindKeys(identity):
   return found 
 
 class AgentManager(object):
-  def __init__(self, identity, agents_path=AGENTS_PATH):
+  def __init__(self, identity, config):
     self.identity = identity
-    self.agents_path = os.path.abspath(
-        os.path.expanduser(os.path.expandvars(agents_path)))
+    self.config = config
+    self.agents_path = os.path.abspath(config.Get("DIR_AGENTS"))
     self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
 
   def LoadUnloadedKeys(self, keys):
@@ -193,7 +212,8 @@ class AgentManager(object):
 
   def RunSSH(self, argv):
     command = ["/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; exec %s %s" % (
-               self.agent_file, self.SSH_PATH, self.EscapeShellArguments(argv))]
+               self.agent_file, self.config.Get("BINARY_SSH"),
+               self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command) 
 
 def main(argv):
@@ -203,9 +223,9 @@ def main(argv):
   sys.stderr = open("/dev/tty", "w")
 
   config = Config().Load()
-  identity = FindIdentity(argv)
-  agent = AgentManager(identity)
-  keys = FindKeys(identity)
+  identity = FindIdentity(argv, config)
+  agent = AgentManager(identity, config)
+  keys = FindKeys(identity, config)
 
   agent.LoadUnloadedKeys(keys)
   return agent.RunSSH(argv[1:])
