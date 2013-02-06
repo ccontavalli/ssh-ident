@@ -31,12 +31,23 @@ In ~/.ssh-ident, I have:
     (r"mod-xslt", "personal"),
     (r"ssh-ident", "personal"),
     (r"opt/work", "work"),
+    (r"opt/private", "secret"),
   ]
   
   MATCH_ARGV = [
     (r"cweb", "personal"),
     (r"corp", "work"),
   ]
+
+  # This is entirely optional.
+  SSH_ADD_OPTIONS = {
+    # Regardless, ask for confirmation before using any of the
+    # work keys.
+    "work": "-c",
+    # Forget about secret keys after ten minutes. ssh-ident will
+    # automatically ask you your passphrase again if they are needed.
+    "secret": "-t 600",
+  }
 
   DEFAULT_IDENTITY = "personal"
 
@@ -133,6 +144,12 @@ class Config(object):
       # at the documentation for more details.
       "MATCH_PATH": [],
       "MATCH_ARGV": [],
+
+      # Dictionary with identity as a key, allows to specify
+      # per identity options when using ssh-add.
+      "SSH_ADD_OPTIONS": {},
+      # ssh-add default options.
+      "SSH_ADD_DEFAULT_OPTIONS": "",
   }
 
   def __init__(self):
@@ -313,7 +330,9 @@ class AgentManager(object):
       keys: iterable of strings, each string a path to a key to load.
     """
     keys = " ".join(keys)
-    self.RunShellCommandInAgent(self.agent_file, "ssh-add %s" % keys)
+    options = self.config.Get("SSH_ADD_OPTIONS").get(
+        self.identity, self.config.Get("SSH_ADD_DEFAULT_OPTIONS"))
+    self.RunShellCommandInAgent(self.agent_file, "ssh-add %s %s" % (options, keys))
 
   def GetLoadedKeys(self):
     """Returns an iterable of strings, each the fingerprint of a loaded key."""
