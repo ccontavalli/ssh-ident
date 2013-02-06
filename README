@@ -4,7 +4,7 @@ NAME
     ssh - Wrapper around ssh to prepare ssh-agent and load identities.
 
 FILE
-    /opt/scripts/ssh-ident/sshc
+    /opt/scripts/ssh-ident/ssh
 
 DESCRIPTION
     Use this script instead of ssh. It will:
@@ -20,7 +20,9 @@ DESCRIPTION
        variables set.
     
     This allows to start agents and load keys on demand, when they are
-    first needed.
+    first needed, and use different agents automatically when connecting
+    to different hosts or same hosts for different purposes. This allows
+    for more isolation, especially when forwarding identities.
     
     Example of use
     ==============
