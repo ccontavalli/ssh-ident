@@ -107,34 +107,83 @@ CLASSES
         Config
     
     class AgentManager(__builtin__.object)
+     |  Manages the ssh-agent for one identity.
+     |  
      |  Methods defined here:
      |  
      |  FindUnloadedKeys(self, keys)
+     |      Determines which keys have not been loaded yet.
+     |      
+     |      Args:
+     |        keys: dict as returned by FindKeys.
+     |      
+     |      Returns:
+     |        iterable of strings, paths to private key files to load.
      |  
      |  GetLoadedKeys(self)
+     |      Returns an iterable of strings, each the fingerprint of a loaded key.
      |  
      |  LoadKeyFiles(self, keys)
+     |      Load all specified keys.
+     |      
+     |      Args:
+     |        keys: iterable of strings, each string a path to a key to load.
      |  
      |  LoadUnloadedKeys(self, keys)
+     |      Loads all the keys specified that are not loaded.
+     |      
+     |      Args:
+     |        keys: dict as returned by FindKeys.
      |  
      |  RunSSH(self, argv)
+     |      Execs ssh with the specified arguments.
      |  
      |  __init__(self, identity, config)
+     |      Initializes an AgentManager object.
+     |      
+     |      Args:
+     |        identity: string, identity the ssh-agent managed by this instance of
+     |            an AgentManager will control.
+     |        config: object implementing the Config interface, allows access to
+     |            the user configuration parameters.
+     |      
+     |      Attributes:
+     |        identity: same as above.
+     |        config: same as above.
+     |        agents_path: directory where the config of all agents is kept.
+     |        agent_file: the config of the agent corresponding to this identity.
+     |      
+     |      Parameters:
+     |        DIR_AGENTS: used to compute agents_path.
+     |        BINARY_SSH: path to the ssh binary.
      |  
      |  ----------------------------------------------------------------------
      |  Static methods defined here:
      |  
      |  EscapeShellArguments(argv)
+     |      Escapes all arguments to the shell, returns a string.
      |  
      |  GetAgentFile(path, identity)
+     |      Returns the path to an agent config file.
+     |      
+     |      Args:
+     |        path: string, the path where agent config files are kept.
+     |        identity: string, identity for which to load the agent.
+     |      
+     |      Returns:
+     |        string, path to the agent file.
      |  
      |  GetPublicKeyFingerprint(key)
+     |      Returns the fingerprint of a public key as a string.
      |  
      |  IsAgentFileValid(agentfile)
+     |      Returns true if the specified agentfile refers to a running agent.
      |  
      |  RunShellCommand(command)
+     |      Runs a shell command, returns (status, stdout), (int, string).
      |  
      |  RunShellCommandInAgent(agentfile, command)
+     |      Runs a shell command with an agent configured in the environment.
      |  
      |  ----------------------------------------------------------------------
      |  Data descriptors defined here:
@@ -146,11 +195,15 @@ CLASSES
      |      list of weak references to the object (if defined)
     
     class Config(__builtin__.object)
+     |  Holds and loads users configurations.
+     |  
      |  Methods defined here:
      |  
      |  Get(self, parameter)
+     |      Returns the value of a parameter, or causes the script to exit.
      |  
      |  Load(self)
+     |      Load configurations from the default user file.
      |  
      |  __init__(self)
      |  
@@ -158,6 +211,7 @@ CLASSES
      |  Static methods defined here:
      |  
      |  Expand(value)
+     |      Expand environment variables or ~ in string parameters.
      |  
      |  ----------------------------------------------------------------------
      |  Data descriptors defined here:
@@ -198,6 +252,21 @@ FUNCTIONS
           matching the first element in elements.
     
     FindKeys(identity, config)
+        Finds all the private and public keys associated with an identity.
+        
+        Args:
+          identity: string, name of the identity to load strings of.
+          config: object implementing the Config interface, providing configurations
+              for the user.
+        
+        Returns:
+          dict, {"key name": {"pub": "/path/to/public/key", "priv":
+          "/path/to/private/key"}}, for each key found, the path of the public
+          key and private key. The key name is just a string representing the
+          key. Note that for a given key, it is not guaranteed that both the
+          public and private key will be found.
+          The return value is affected by DIR_IDENTITIES and PATTERN_KEYS
+          configuration parameters.
     
     main(argv)
 

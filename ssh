@@ -107,6 +107,8 @@ import collections
 
 
 class Config(object):
+  """Holds and loads users configurations."""
+
   defaults = {
       # Where to find the per-user configuration.
       "FILE_USER_CONFIG": "$HOME/.ssh-ident",
@@ -135,23 +137,28 @@ class Config(object):
     self.values = {}
 
   def Load(self):
+    """Load configurations from the default user file."""
     path = self.Get("FILE_USER_CONFIG")
     variables = {}
     try: 
       execfile(path, {}, variables)
     except IOError:
-      print >>sys.stderr, "Warning: could not load config '%s', you might as well be using plain ssh." % path
+      print >>sys.stderr, (
+          "Warning: could not load config '%s', "
+          "you might as well be using plain ssh." % path)
       return self
     self.values = variables
     return self
 
   @staticmethod
   def Expand(value):
+    """Expand environment variables or ~ in string parameters."""
     if isinstance(value, str):
       return os.path.expanduser(os.path.expandvars(value))
     return value
  
   def Get(self, parameter):
+    """Returns the value of a parameter, or causes the script to exit."""
     if parameter in self.values:
       return self.Expand(self.values[parameter])
     if parameter in self.defaults:
@@ -198,6 +205,22 @@ def FindIdentity(argv, config):
       config.Get("DEFAULT_IDENTITY"))
 
 def FindKeys(identity, config):
+  """Finds all the private and public keys associated with an identity.
+
+  Args:
+    identity: string, name of the identity to load strings of.
+    config: object implementing the Config interface, providing configurations
+        for the user.
+
+  Returns:
+    dict, {"key name": {"pub": "/path/to/public/key", "priv":
+    "/path/to/private/key"}}, for each key found, the path of the public
+    key and private key. The key name is just a string representing the
+    key. Note that for a given key, it is not guaranteed that both the
+    public and private key will be found.
+    The return value is affected by DIR_IDENTITIES and PATTERN_KEYS
+    configuration parameters.
+  """
   keyfiles = glob.glob(os.path.join(
       config.Get("DIR_IDENTITIES"), identity, config.Get("PATTERN_KEYS")))
 
@@ -218,13 +241,38 @@ def FindKeys(identity, config):
   return found 
 
 class AgentManager(object):
+  """Manages the ssh-agent for one identity."""
+
   def __init__(self, identity, config):
+    """Initializes an AgentManager object.
+
+    Args:
+      identity: string, identity the ssh-agent managed by this instance of
+          an AgentManager will control.
+      config: object implementing the Config interface, allows access to
+          the user configuration parameters.
+
+    Attributes:
+      identity: same as above.
+      config: same as above.
+      agents_path: directory where the config of all agents is kept.
+      agent_file: the config of the agent corresponding to this identity.
+
+    Parameters:
+      DIR_AGENTS: used to compute agents_path.
+      BINARY_SSH: path to the ssh binary.
+    """
     self.identity = identity
     self.config = config
     self.agents_path = os.path.abspath(config.Get("DIR_AGENTS"))
     self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
 
   def LoadUnloadedKeys(self, keys):
+    """Loads all the keys specified that are not loaded.
+
+    Args:
+      keys: dict as returned by FindKeys.
+    """
     toload = self.FindUnloadedKeys(keys)
     if toload:
       print "Loading keys:\n    %s" % "\n    ".join(toload)
@@ -233,6 +281,14 @@ class AgentManager(object):
       print "All keys already loaded"
 
   def FindUnloadedKeys(self, keys):
+    """Determines which keys have not been loaded yet.
+
+    Args:
+      keys: dict as returned by FindKeys.
+
+    Returns:
+      iterable of strings, paths to private key files to load.
+    """
     loaded = set(self.GetLoadedKeys())
     toload = set()
     for key, config in keys.iteritems():
@@ -249,10 +305,16 @@ class AgentManager(object):
     return toload
 
   def LoadKeyFiles(self, keys):
+    """Load all specified keys.
+
+    Args:
+      keys: iterable of strings, each string a path to a key to load.
+    """
     keys = " ".join(keys)
     self.RunShellCommandInAgent(self.agent_file, "ssh-add %s" % keys)
 
   def GetLoadedKeys(self):
+    """Returns an iterable of strings, each the fingerprint of a loaded key."""
     retval, stdout = self.RunShellCommandInAgent(self.agent_file, "ssh-add -l")
     if retval != 0:
       return []
@@ -268,6 +330,7 @@ class AgentManager(object):
 
   @staticmethod
   def GetPublicKeyFingerprint(key):
+    """Returns the fingerprint of a public key as a string."""
     retval, stdout = AgentManager.RunShellCommand("ssh-keygen -l -f %s |tr -s ' '" % key)
     if retval:
       return None
@@ -280,6 +343,15 @@ class AgentManager(object):
 
   @staticmethod
   def GetAgentFile(path, identity):
+    """Returns the path to an agent config file.
+
+    Args:
+      path: string, the path where agent config files are kept.
+      identity: string, identity for which to load the agent.
+
+    Returns:
+      string, path to the agent file.
+    """
     # Use the hostname as part of the path just in case this is on NFS.
     agentfile = os.path.join(path, "agent-%s-%s" % (identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
@@ -293,6 +365,7 @@ class AgentManager(object):
 
   @staticmethod
   def IsAgentFileValid(agentfile):
+    """Returns true if the specified agentfile refers to a running agent."""
     retval, output = AgentManager.RunShellCommandInAgent(agentfile, "ssh-add -l >/dev/null 2>/dev/null") 
     if retval & 0xff not in [0, 1]:
       print >>sys.stderr, "Agent in %s not running" % agentfile
@@ -301,6 +374,7 @@ class AgentManager(object):
 
   @staticmethod
   def RunShellCommand(command):
+    """Runs a shell command, returns (status, stdout), (int, string)."""
     command = ["/bin/sh", "-c", command]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
@@ -308,19 +382,23 @@ class AgentManager(object):
 
   @staticmethod
   def RunShellCommandInAgent(agentfile, command):
-    command = ["/usr/bin/env", "-i", "/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; %s" % (agentfile, command)]
+    """Runs a shell command with an agent configured in the environment."""
+    command = ["/usr/bin/env", "-i", "/bin/sh", "-c",
+               ". %s >/dev/null 2>/dev/null; %s" % (agentfile, command)]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
     return process.wait(), stdout
 
   @staticmethod
   def EscapeShellArguments(argv):
+    """Escapes all arguments to the shell, returns a string."""
     escaped = []
     for arg in argv:
       escaped.append("'%s'" % arg.replace("'", "'\"'\"'"))
     return " ".join(escaped)
 
   def RunSSH(self, argv):
+    """Execs ssh with the specified arguments."""
     command = ["/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; exec %s %s" % (
                self.agent_file, self.config.Get("BINARY_SSH"),
                self.EscapeShellArguments(argv))]
