@@ -1,13 +1,35 @@
-Help on module ssh:
+Help on module ssh-ident:
 
 NAME
-    ssh - Wrapper around ssh to prepare ssh-agent and load identities.
+    ssh-ident - Wrapper around ssh to prepare ssh-agent and load identities.
 
 FILE
-    /opt/scripts/ssh-ident/ssh
+    /opt/projects/ssh-ident.git/ssh-ident
 
 DESCRIPTION
-    Use this script instead of ssh. It will:
+    This script starts agents and loads keys on demand, when they are
+    first needed. All you have to do is modify your .bashrc to have:
+    
+      alias ssh='/path/to/ssh-ident'
+    
+    or add:
+    
+      ln -s /path/to/ssh-ident ~/bin/ssh
+    
+    and have ~/bin/ssh first in your PATH.
+    
+    Beside loading agent and keys on demand, ssh-ident is able to use different 
+    agents and maintain multiple identities for the same account, while using
+    them automatically depending on the host you are connecting to or path you
+    are ussing ssh from.
+    
+    This allows for more isolation especially when forwarding identities
+    or using sites like github, gitorious or unfuddle.
+    
+    Works if your home directory is on NFS, prevents multiple agents from running,
+    automatically shares the same agents across login sessions.
+    
+    If you configure multiple identites, when you run this script, it will:
     
     1) Check the arguments provided to ssh and the current working
        directory against a list of patterns defined in the
@@ -19,30 +41,50 @@ DESCRIPTION
     3) It will then run ssh as usual, with the correct enviornment
        variables set.
     
-    This allows to start agents and load keys on demand, when they are
-    first needed, and use different agents automatically when connecting
-    to different hosts or same hosts for different purposes. This allows
-    for more isolation, especially when forwarding identities.
+    Note that if no ~/.ssh-ident configuration file is provided, it will
+    just load agents and keys on demand from the default ssh configuration
+    directories.
+    
     
     Example of use
     ==============
     
     In .bashrc, I have:
+    
       alias ssh=/home/ccontavalli/scripts/ssh-ident
     
-    In ~/.ssh-ident, I have:
+    all I have to do now is logout, login and then:
     
+      ssh remotehost
+    
+    will load an agent (if necessary), and ask the passphrase for my key
+    (if not loaded yet). If I ssh to somewhere else now, the already loaded
+    agent and keys will be used.
+    
+    To have multiple identities, you start by creating a ~/.ssh-ident file.
+    In it, you should add something like:
+    
+      # This means that if I launch ssh from a directory that has 'mod-xslt'
+      # in the name, the 'personal' identity has to be used.
       MATCH_PATH = [
+        # (directory, identity)
         (r"mod-xslt", "personal"),
         (r"ssh-ident", "personal"),
         (r"opt/work", "work"),
         (r"opt/private", "secret"),
       ]
       
+      # This means that if any of ssh arguments have 'cweb' in it, the 'personal'
+      # identity has to be used. For example: "ssh myhost.cweb.com" will have cweb
+      # in argv, and the "personal" identity will be used.
       MATCH_ARGV = [
         (r"cweb", "personal"),
         (r"corp", "work"),
       ]
+    
+      # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
+      # generally your loginname, no need to change it.
+      # DEFAULT_IDENTITY = "foo"
     
       # This is entirely optional.
       SSH_ADD_OPTIONS = {
@@ -53,8 +95,6 @@ DESCRIPTION
         # automatically ask you your passphrase again if they are needed.
         "secret": "-t 600",
       }
-    
-      DEFAULT_IDENTITY = "personal"
     
     Now if I run:
     
@@ -80,7 +120,7 @@ DESCRIPTION
     1) Create the directory where all the identities and agents
        will be kept:
     
-        $ mkdir -p ~/.ssh/{agents,identities}; chmod u=rwX,go= -R ~/.ssh
+        $ mkdir -p ~/.ssh/identities; chmod u=rwX,go= -R ~/.ssh
     
     2) Create identities, for example:
     
@@ -94,7 +134,7 @@ DESCRIPTION
         $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
     
         # Generate keys to be used for work only, rsa
-        $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/rsa-key
+        $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/id_rsa
     
         ...
     
@@ -105,14 +145,16 @@ DESCRIPTION
     If you want to only load keys that have "key" in the name, you can
     add in your .ssh-ident:
     
-          PATTERN_KEYS = "*key*"
+          PATTERN_KEYS = "key"
     
-    The default is PATTERN_KEYS = "*". You could also redefine:
+    The default is:
+          "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)"
     
+    You can also redefine:
           DIR_IDENTITIES = "$HOME/.ssh/identities"
           DIR_AGENTS = "$HOME/.ssh/agents"
     
-    To point somewhere else if you desire.
+    To point somewhere else if you so desire.
 
 CLASSES
     __builtin__.object
