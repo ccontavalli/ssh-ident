@@ -2,7 +2,29 @@
 
 """Wrapper around ssh to prepare ssh-agent and load identities.
 
-Use this script instead of ssh. It will:
+This script starts agents and loads keys on demand, when they are
+first needed. All you have to do is modify your .bashrc to have:
+
+  alias ssh='/path/to/ssh-ident'
+
+or add:
+
+  ln -s /path/to/ssh-ident ~/bin/ssh
+
+and have ~/bin/ssh first in your PATH.
+
+Beside loading agent and keys on demand, ssh-ident is able to use different 
+agents and maintain multiple identities for the same account, while using
+them automatically depending on the host you are connecting to or path you
+are ussing ssh from.
+
+This allows for more isolation especially when forwarding identities
+or using sites like github, gitorious or unfuddle.
+
+Works if your home directory is on NFS, prevents multiple agents from running,
+automatically shares the same agents across login sessions.
+
+If you configure multiple identites, when you run this script, it will:
 
 1) Check the arguments provided to ssh and the current working
    directory against a list of patterns defined in the
@@ -14,30 +36,50 @@ Use this script instead of ssh. It will:
 3) It will then run ssh as usual, with the correct enviornment
    variables set.
 
-This allows to start agents and load keys on demand, when they are
-first needed, and use different agents automatically when connecting
-to different hosts or same hosts for different purposes. This allows
-for more isolation, especially when forwarding identities.
+Note that if no ~/.ssh-ident configuration file is provided, it will
+just load agents and keys on demand from the default ssh configuration
+directories.
+
 
 Example of use
 ==============
 
 In .bashrc, I have:
+
   alias ssh=/home/ccontavalli/scripts/ssh-ident
 
-In ~/.ssh-ident, I have:
+all I have to do now is logout, login and then:
 
+  ssh remotehost
+
+will load an agent (if necessary), and ask the passphrase for my key
+(if not loaded yet). If I ssh to somewhere else now, the already loaded
+agent and keys will be used.
+
+To have multiple identities, you start by creating a ~/.ssh-ident file.
+In it, you should add something like:
+
+  # This means that if I launch ssh from a directory that has 'mod-xslt'
+  # in the name, the 'personal' identity has to be used.
   MATCH_PATH = [
+    # (directory, identity)
     (r"mod-xslt", "personal"),
     (r"ssh-ident", "personal"),
     (r"opt/work", "work"),
     (r"opt/private", "secret"),
   ]
   
+  # This means that if any of ssh arguments have 'cweb' in it, the 'personal'
+  # identity has to be used. For example: "ssh myhost.cweb.com" will have cweb
+  # in argv, and the "personal" identity will be used.
   MATCH_ARGV = [
     (r"cweb", "personal"),
     (r"corp", "work"),
   ]
+
+  # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
+  # generally your loginname, no need to change it.
+  # DEFAULT_IDENTITY = "foo"
 
   # This is entirely optional.
   SSH_ADD_OPTIONS = {
@@ -48,8 +90,6 @@ In ~/.ssh-ident, I have:
     # automatically ask you your passphrase again if they are needed.
     "secret": "-t 600",
   }
-
-  DEFAULT_IDENTITY = "personal"
 
 Now if I run:
 
@@ -75,7 +115,7 @@ To setup identities with the default parameters, you should:
 1) Create the directory where all the identities and agents
    will be kept:
 
-    $ mkdir -p ~/.ssh/{agents,identities}; chmod u=rwX,go= -R ~/.ssh
+    $ mkdir -p ~/.ssh/identities; chmod u=rwX,go= -R ~/.ssh
 
 2) Create identities, for example:
 
@@ -89,7 +129,7 @@ To setup identities with the default parameters, you should:
     $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
 
     # Generate keys to be used for work only, rsa
-    $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/rsa-key
+    $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/id_rsa
 
     ...
 
@@ -100,19 +140,23 @@ All files in your identities subdirectories will be considered keys.
 If you want to only load keys that have "key" in the name, you can
 add in your .ssh-ident:
 
-      PATTERN_KEYS = "*key*"
+      PATTERN_KEYS = "key"
 
-The default is PATTERN_KEYS = "*". You could also redefine:
+The default is:
+      "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)"
 
+You can also redefine:
       DIR_IDENTITIES = "$HOME/.ssh/identities"
       DIR_AGENTS = "$HOME/.ssh/agents"
 
-To point somewhere else if you desire.
+To point somewhere else if you so desire.
 """
 
 import glob
 import sys
+import errno
 import os
+import getpass
 import re
 import socket
 import subprocess
@@ -132,7 +176,7 @@ class Config(object):
       "DIR_AGENTS": "$HOME/.ssh/agents",
 
       # How to identify key files in the identities directory.
-      "PATTERN_KEYS": "*",
+      "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)",
       # Complete path of full ssh binary to use.
       "BINARY_SSH": "/usr/bin/ssh",
 
@@ -162,9 +206,6 @@ class Config(object):
     try: 
       execfile(path, {}, variables)
     except IOError:
-      print >>sys.stderr, (
-          "Warning: could not load config '%s', "
-          "you might as well be using plain ssh." % path)
       return self
     self.values = variables
     return self
@@ -240,23 +281,41 @@ def FindKeys(identity, config):
     The return value is affected by DIR_IDENTITIES and PATTERN_KEYS
     configuration parameters.
   """
-  keyfiles = glob.glob(os.path.join(
-      config.Get("DIR_IDENTITIES"), identity, config.Get("PATTERN_KEYS")))
+  directories = [os.path.join(config.Get("DIR_IDENTITIES"), identity)]
+  if identity == getpass.getuser():
+    directories.append(os.path.expanduser("~/.ssh"))
 
+  pattern = re.compile(config.Get("PATTERN_KEYS"))
   found = collections.defaultdict(dict)
-  for key in keyfiles:
-    kinds = (
-        ("private", "priv"),
-        ("public", "pub"),
-        (".pub", "pub"),
-        ("", "priv"),
-    )
-    for pattern, kind in kinds:
-      if pattern in key:
-        found[key.replace(pattern, "")][kind] = key
+  for directory in directories:
+    try:
+      keyfiles = os.listdir(directory)
+    except OSError, e:
+      if e.errno == errno.ENOENT:
+        continue
+      raise
+
+    for key in keyfiles:
+      key = os.path.join(directory, key)
+      if not os.path.isfile(key):
+        continue
+      if not pattern.search(key):
+        continue
+
+      kinds = (
+          ("private", "priv"),
+          ("public", "pub"),
+          (".pub", "pub"),
+          ("", "priv"),
+      )
+      for match, kind in kinds:
+        if match in key:
+          found[key.replace(match, "")][kind] = key
   
   if not found:
-    print "Warning: no keys found for identity %s" % identity
+    print >>sys.stderr, "Warning: no keys found for identity %s in:" % identity
+    print >>sys.stderr, directories
+
   return found 
 
 class AgentManager(object):
@@ -294,10 +353,10 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print "Loading keys:\n    %s" % "\n    ".join(toload)
+      print >>sys.stderr, "Loading keys:\n    %s" % "\n    ".join(toload)
       self.LoadKeyFiles(toload)
     else:
-      print "All keys already loaded"
+      print >>sys.stderr, "All keys already loaded"
 
   def FindUnloadedKeys(self, keys):
     """Determines which keys have not been loaded yet.
@@ -373,6 +432,15 @@ class AgentManager(object):
     Returns:
       string, path to the agent file.
     """
+    # Create the paths, if they do not exist yet.
+    try:
+      os.makedirs(path, 0700)
+    except OSError, e:
+      if e.errno != errno.EEXIST:
+        raise OSError(
+            "Cannot create agents directory, try manually with 'mkdir -p %s'" %
+            path)
+
     # Use the hostname as part of the path just in case this is on NFS.
     agentfile = os.path.join(path, "agent-%s-%s" % (identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
