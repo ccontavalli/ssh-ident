@@ -2,44 +2,27 @@
 
 """Wrapper around ssh to prepare ssh-agent and load identities.
 
-This script starts agents and loads keys on demand, when they are
-first needed. All you have to do is modify your .bashrc to have:
+This script starts ssh-agents and loads keys when they are first needed. All
+you have to do is modify your .bashrc to have:
 
   alias ssh='/path/to/ssh-ident'
 
-or add:
+or add a link to ssh-ident from a directory in your path, for example:
 
   ln -s /path/to/ssh-ident ~/bin/ssh
 
-and have ~/bin/ssh first in your PATH.
-
-Beside loading agent and keys on demand, ssh-ident is able to use different 
-agents and maintain multiple identities for the same account, while using
-them automatically depending on the host you are connecting to or path you
-are ussing ssh from.
-
-This allows for more isolation especially when forwarding identities
-or using sites like github, gitorious or unfuddle.
-
-Works if your home directory is on NFS, prevents multiple agents from running,
-automatically shares the same agents across login sessions.
-
-If you configure multiple identites, when you run this script, it will:
-
-1) Check the arguments provided to ssh and the current working
-   directory against a list of patterns defined in the
-   ~/.ssh-ident configuration file.
-
-2) Based on those patterns, the script will determine an ssh-agent
-   to use, and a list of keys that need to be loaded in the agent.
-
-3) It will then run ssh as usual, with the correct enviornment
-   variables set.
-
-Note that if no ~/.ssh-ident configuration file is provided, it will
-just load agents and keys on demand from the default ssh configuration
-directories.
-
+Main features of ssh-ident:
+- loads ssh-agents and keys on demand.
+- can prepare a different agent and different set of keys depending on the host
+  you are connecting to, or the directory you are using ssh from. This provides
+  isolation when using agent forwarding and allows to use multiple accounts on
+  sites like github, unfuddle and gitorious easily.
+- automatically shares the same agent across multiple login sessions.
+- works if your home directory is on NFS and prevents multiple agents for the
+  same account (and identity) from running.
+- allows to specify options for the loaded keys. For example, you can provide a
+  -t 60 to keep keys loaded only for 60 seconds.  Or -c, to always ask for
+  confirmation before using a key.
 
 Example of use
 ==============
@@ -50,28 +33,34 @@ In .bashrc, I have:
 
 all I have to do now is logout, login and then:
 
-  ssh remotehost
+  $ ssh somewhere
 
-will load an agent (if necessary), and ask the passphrase for my key
-(if not loaded yet). If I ssh to somewhere else now, the already loaded
-agent and keys will be used.
+ssh-ident will be called instead of ssh, and it will:
+- check if an agent is running. If not, it will start one.
+- try to load all the keys in ~/.ssh, if not loaded.
 
-To have multiple identities, you start by creating a ~/.ssh-ident file.
-In it, you should add something like:
+If I now ssh again, or somewhere else, ssh-ident will reuse the same agent and
+the same keys, if valid.
 
-  # This means that if I launch ssh from a directory that has 'mod-xslt'
-  # in the name, the 'personal' identity has to be used.
+To have multiple identities, all I have to do is:
+
+1) create a ~/.ssh-ident file. In this file, I need to tell ssh-ident which
+   identities to use and when. The file should look something like:
+
+  # Specifies which identity to use depending on the path I'm running ssh from.
+  # For example: ("mod-xslt", "personal") means that for any path that
+  # contains the word "mod-xslt", the "personal" identity should be used.
   MATCH_PATH = [
-    # (directory, identity)
+    # (directory pattern, identity)
     (r"mod-xslt", "personal"),
     (r"ssh-ident", "personal"),
     (r"opt/work", "work"),
     (r"opt/private", "secret"),
   ]
   
-  # This means that if any of ssh arguments have 'cweb' in it, the 'personal'
-  # identity has to be used. For example: "ssh myhost.cweb.com" will have cweb
-  # in argv, and the "personal" identity will be used.
+  # If any of the ssh arguments have 'cweb' in it, the 'personal' identity has
+  # to be used. For example: "ssh myhost.cweb.com" will have cweb in argv, and
+  # the "personal" identity will be used.
   MATCH_ARGV = [
     (r"cweb", "personal"),
     (r"corp", "work"),
@@ -91,39 +80,18 @@ In it, you should add something like:
     "secret": "-t 600",
   }
 
-Now if I run:
-
-  ssh corp.mywemployer.com
-
-ssh-ident will be invoked instead, and:
-
-  1) check ssh argv, determine that the "work" identity has to be used.
-  2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no
-     agent, it will prepare one.
-  3) look in ~/.ssh/identities/work/* for a list of keys to load for
-     this identity. It will try to load any key that is not already
-     loaded in the agent.
-  4) finally run ssh with the environment setup such that it will
-     have access only to the agent for the identity work, and the
-     corresponding keys.
-
-Setting up identities
-=====================
-
-To setup identities with the default parameters, you should:
-
-1) Create the directory where all the identities and agents
+2) Create the directory where all the identities and agents
    will be kept:
 
     $ mkdir -p ~/.ssh/identities; chmod u=rwX,go= -R ~/.ssh
 
-2) Create identities, for example:
+3) Create identities, for example:
 
     $ mkdir -p ~/.ssh/identities/personal
     $ mkdir -p ~/.ssh/identities/work
     $ mkdir -p ~/.ssh/identities/secret
 
-3) Generate (or copy) keys for those identities:
+4) Generate (or copy) keys for those identities:
 
     # Default keys are for my personal account
     $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
@@ -133,12 +101,28 @@ To setup identities with the default parameters, you should:
 
     ...
 
-Note that ssh-ident needs to access both your private and public
-key. Note also that it identifies public keys by the .pub extension.
-All files in your identities subdirectories will be considered keys.
 
-If you want to only load keys that have "key" in the name, you can
-add in your .ssh-ident:
+Now if I run:
+
+  $ ssh corp.mywemployer.com
+
+ssh-ident will be invoked instead, and:
+
+  1) check ssh argv, determine that the "work" identity has to be used.
+  2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no agent, it
+     will prepare one.
+  3) look in ~/.ssh/identities/work/* for a list of keys to load for this
+     identity. It will try to load any key that is not already loaded in the
+     agent.
+  4) finally run ssh with the environment setup such that it will have access
+     only to the agent for the identity work, and the corresponding keys.
+
+Note that ssh-ident needs to access both your private and public keys. Note
+also that it identifies public keys by the .pub extension. All files in your
+identities subdirectories will be considered keys.
+
+If you want to only load keys that have "key" in the name, you can add in your
+.ssh-ident:
 
       PATTERN_KEYS = "key"
 
