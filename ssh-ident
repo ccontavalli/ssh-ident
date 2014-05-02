@@ -252,6 +252,8 @@ class Config(object):
  
   def Get(self, parameter):
     """Returns the value of a parameter, or causes the script to exit."""
+    if parameter in os.environ:
+      return self.Expand(os.environ[parameter])
     if parameter in self.values:
       return self.Expand(self.values[parameter])
     if parameter in self.defaults:
