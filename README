@@ -1,36 +1,46 @@
 Help on module ssh-ident:
 
 NAME
-    ssh-ident - Wrapper around ssh to prepare ssh-agent and load identities.
+    ssh-ident - Start and use ssh-agent and load identities as necessary.
 
 FILE
     /opt/projects/ssh-ident.git/ssh-ident
 
 DESCRIPTION
-    This script starts ssh-agents and loads keys when they are first needed. All
-    you have to do is modify your .bashrc to have:
+    Use this script to start ssh-agents and load ssh keys on demand,
+    when they are first needed.
+    
+    All you have to do is modify your .bashrc to have:
     
       alias ssh='/path/to/ssh-ident'
     
-    or add a link to ssh-ident from a directory in your path, for example:
+    or add a link to ssh-ident from a directory in your PATH, for example:
     
       ln -s /path/to/ssh-ident ~/bin/ssh
     
-    Main features of ssh-ident:
-    - loads ssh-agents and keys on demand.
-    - can prepare a different agent and different set of keys depending on the host
-      you are connecting to, or the directory you are using ssh from. This provides
-      isolation when using agent forwarding and allows to use multiple accounts on
-      sites like github, unfuddle and gitorious easily.
-    - automatically shares the same agent across multiple login sessions.
-    - works if your home directory is on NFS and prevents multiple agents for the
-      same account (and identity) from running.
-    - allows to specify options for the loaded keys. For example, you can provide a
-      -t 60 to keep keys loaded only for 60 seconds.  Or -c, to always ask for
-      confirmation before using a key.
+    If you use scp or rsync regularly, you should add a few more lines described
+    below.
     
-    Example of use
-    ==============
+    In any case, ssh-ident:
+    
+    - will create an ssh-agent and load the keys you need the first time you actually
+      need them, once. No matter how many terminals, ssh or login sessions you
+      have, no matter if your home is shared via NFS.
+    
+    - can prepare and use a different agent and different set of keys depending on
+      the host you are connecting to, or the directory you are using ssh from. This
+      allows for isolating keys when using agent forwarding with different sites
+      (eg, university, work, home, secret evil internet identity, ...). It also
+      allows to use multiple accounts on sites like github, unfuddle and gitorious
+      easily.
+    
+    - allows to specify different options for each set of keys. For example, you
+      can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
+      always ask for confirmation before using a key.
+    
+    
+    Simple use
+    ==========
     
     In .bashrc, I have:
     
@@ -47,6 +57,40 @@ DESCRIPTION
     If I now ssh again, or somewhere else, ssh-ident will reuse the same agent and
     the same keys, if valid.
     
+    
+    About scp, rsync, and friends
+    =============================
+    
+    scp, rsync, and most similar tools internally invoke ssh. If you don't tell
+    them to use ssh-ident instead, key loading won't work. There are two simple
+    ways to solve the problem:
+    
+    1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to ssh-ident
+       in a directory in your PATH before /usr/bin or /bin, similarly to what
+       was described previously. For example, add to your .bashrc:
+        
+        export PATH="~/bin:$PATH"
+        ln -s /path/to/ssh-ident ~/bin/ssh
+    
+       Make sure `echo $PATH` shows '~/bin' *before* '/usr/bin' or '/bin'. You
+       can verify this is working as expected with `which ssh`, which should show
+       ~/bin/ssh.
+    
+    2) Add a few more aliases in your .bashrc file, for example:
+    
+        alias scp='BINARY_SSH=scp /path/to/ssh-ident'
+        alias rsync='BINARY_SSH=rsync /path/to/ssh-ident'
+        ...
+    
+    3) Use command specific methods, for example:
+    
+        rsync -e '/path/to/ssh-ident' ...
+        scp -S '/path/to/ssh-ident' ...
+    
+    
+    Config file with multiple identities
+    ====================================
+    
     To have multiple identities, all I have to do is:
     
     1) create a ~/.ssh-ident file. In this file, I need to tell ssh-ident which
@@ -55,6 +99,7 @@ DESCRIPTION
       # Specifies which identity to use depending on the path I'm running ssh from.
       # For example: ("mod-xslt", "personal") means that for any path that
       # contains the word "mod-xslt", the "personal" identity should be used.
+      # This is optional - don't include any MATCH_PATH if you don't need it.
       MATCH_PATH = [
         # (directory pattern, identity)
         (r"mod-xslt", "personal"),
@@ -66,6 +111,7 @@ DESCRIPTION
       # If any of the ssh arguments have 'cweb' in it, the 'personal' identity has
       # to be used. For example: "ssh myhost.cweb.com" will have cweb in argv, and
       # the "personal" identity will be used.
+      # This is optional - don't include any MATCH_ARGV if you don't need it.
       MATCH_ARGV = [
         (r"cweb", "personal"),
         (r"corp", "work"),
@@ -73,9 +119,10 @@ DESCRIPTION
     
       # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
       # generally your loginname, no need to change it.
+      # This is optional - don't include any DEFAULT_IDENTITY if you don't need it.
       # DEFAULT_IDENTITY = "foo"
     
-      # This is entirely optional.
+      # This is optional - don't include any SSH_ADD_OPTIONS if you don't need it.
       SSH_ADD_OPTIONS = {
         # Regardless, ask for confirmation before using any of the
         # work keys.
@@ -90,7 +137,7 @@ DESCRIPTION
     
         $ mkdir -p ~/.ssh/identities; chmod u=rwX,go= -R ~/.ssh
     
-    3) Create identities, for example:
+    3) Create a directory for each identity, for example:
     
         $ mkdir -p ~/.ssh/identities/personal
         $ mkdir -p ~/.ssh/identities/work
@@ -132,9 +179,11 @@ DESCRIPTION
           PATTERN_KEYS = "key"
     
     The default is:
+    
           "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)"
     
     You can also redefine:
+    
           DIR_IDENTITIES = "$HOME/.ssh/identities"
           DIR_AGENTS = "$HOME/.ssh/agents"
     
