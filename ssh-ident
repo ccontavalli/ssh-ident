@@ -183,6 +183,14 @@ You can also redefine:
       DIR_AGENTS = "$HOME/.ssh/agents"
 
 To point somewhere else if you so desire.
+
+
+CREDITS
+=======
+
+- Carlo Contavalli, http://www.github.com/ccontavalli, main author.
+- Hubert depesz Lubaczewski, http://www.github.com/despez, support
+  for using environment variables for configuration.
 """
 
 import glob
