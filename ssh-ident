@@ -18,16 +18,16 @@ below.
 
 In any case, ssh-ident:
 
-- will create an ssh-agent and load the keys you need the first time you actually
-  need them, once. No matter how many terminals, ssh or login sessions you
-  have, no matter if your home is shared via NFS.
+- will create an ssh-agent and load the keys you need the first time you
+  actually need them, once. No matter how many terminals, ssh or login
+  sessions you have, no matter if your home is shared via NFS.
 
-- can prepare and use a different agent and different set of keys depending on
-  the host you are connecting to, or the directory you are using ssh from. This
-  allows for isolating keys when using agent forwarding with different sites
-  (eg, university, work, home, secret evil internet identity, ...). It also
-  allows to use multiple accounts on sites like github, unfuddle and gitorious
-  easily.
+- can prepare and use a different agent and different set of keys depending
+  on the host you are connecting to, or the directory you are using ssh from.
+  This allows for isolating keys when using agent forwarding with different
+  sites (eg, university, work, home, secret evil internet identity, ...). It
+  also allows to use multiple accounts on sites like github, unfuddle and
+  gitorious easily.
 
 - allows to specify different options for each set of keys. For example, you
   can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
@@ -49,8 +49,8 @@ ssh-ident will be called instead of ssh, and it will:
 - check if an agent is running. If not, it will start one.
 - try to load all the keys in ~/.ssh, if not loaded.
 
-If I now ssh again, or somewhere else, ssh-ident will reuse the same agent and
-the same keys, if valid.
+If I now ssh again, or somewhere else, ssh-ident will reuse the same agent
+and the same keys, if valid.
 
 
 About scp, rsync, and friends
@@ -60,16 +60,16 @@ scp, rsync, and most similar tools internally invoke ssh. If you don't tell
 them to use ssh-ident instead, key loading won't work. There are two simple
 ways to solve the problem:
 
-1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to ssh-ident
-   in a directory in your PATH before /usr/bin or /bin, similarly to what
-   was described previously. For example, add to your .bashrc:
+1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to
+   ssh-ident in a directory in your PATH before /usr/bin or /bin, similarly
+   to what was described previously. For example, add to your .bashrc:
     
     export PATH="~/bin:$PATH"
     ln -s /path/to/ssh-ident ~/bin/ssh
 
    Make sure `echo $PATH` shows '~/bin' *before* '/usr/bin' or '/bin'. You
-   can verify this is working as expected with `which ssh`, which should show
-   ~/bin/ssh.
+   can verify this is working as expected with `which ssh`, which should
+   show ~/bin/ssh.
 
 2) Add a few more aliases in your .bashrc file, for example:
 
@@ -91,7 +91,8 @@ To have multiple identities, all I have to do is:
 1) create a ~/.ssh-ident file. In this file, I need to tell ssh-ident which
    identities to use and when. The file should look something like:
 
-  # Specifies which identity to use depending on the path I'm running ssh from.
+  # Specifies which identity to use depending on the path I'm running ssh
+  # from.
   # For example: ("mod-xslt", "personal") means that for any path that
   # contains the word "mod-xslt", the "personal" identity should be used.
   # This is optional - don't include any MATCH_PATH if you don't need it.
@@ -103,10 +104,11 @@ To have multiple identities, all I have to do is:
     (r"opt/private", "secret"),
   ]
   
-  # If any of the ssh arguments have 'cweb' in it, the 'personal' identity has
-  # to be used. For example: "ssh myhost.cweb.com" will have cweb in argv, and
-  # the "personal" identity will be used.
-  # This is optional - don't include any MATCH_ARGV if you don't need it.
+  # If any of the ssh arguments have 'cweb' in it, the 'personal' identity
+  # has to be used. For example: "ssh myhost.cweb.com" will have cweb in
+  # argv, and the "personal" identity will be used.
+  # This is optional - don't include any MATCH_ARGV if you don't
+  # need it.
   MATCH_ARGV = [
     (r"cweb", "personal"),
     (r"corp", "work"),
@@ -114,10 +116,12 @@ To have multiple identities, all I have to do is:
 
   # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
   # generally your loginname, no need to change it.
-  # This is optional - don't include any DEFAULT_IDENTITY if you don't need it.
+  # This is optional - don't include any DEFAULT_IDENTITY if you don't
+  # need it.
   # DEFAULT_IDENTITY = "foo"
 
-  # This is optional - don't include any SSH_ADD_OPTIONS if you don't need it.
+  # This is optional - don't include any SSH_ADD_OPTIONS if you don't
+  # need it.
   SSH_ADD_OPTIONS = {
     # Regardless, ask for confirmation before using any of the
     # work keys.
@@ -156,20 +160,21 @@ Now if I run:
 ssh-ident will be invoked instead, and:
 
   1) check ssh argv, determine that the "work" identity has to be used.
-  2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no agent, it
-     will prepare one.
+  2) look in ~/.ssh/agents, for a "work" agent loaded. If there is no
+     agent, it will prepare one.
   3) look in ~/.ssh/identities/work/* for a list of keys to load for this
-     identity. It will try to load any key that is not already loaded in the
-     agent.
-  4) finally run ssh with the environment setup such that it will have access
-     only to the agent for the identity work, and the corresponding keys.
+     identity. It will try to load any key that is not already loaded in
+     the agent.
+  4) finally run ssh with the environment setup such that it will have
+     access only to the agent for the identity work, and the corresponding
+     keys.
 
 Note that ssh-ident needs to access both your private and public keys. Note
 also that it identifies public keys by the .pub extension. All files in your
 identities subdirectories will be considered keys.
 
-If you want to only load keys that have "key" in the name, you can add in your
-.ssh-ident:
+If you want to only load keys that have "key" in the name, you can add
+to your .ssh-ident:
 
       PATTERN_KEYS = "key"
 
