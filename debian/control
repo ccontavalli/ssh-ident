@@ -1,0 +1,15 @@
+Source: ssh-ident
+Maintainer: Carlo Contavalli (ccontavalli@gmail.com).
+Section: admin
+Priority: extra
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.9.4
+Vcs-Git: git://github.com/ccontavalli/ssh-ident
+Vcs-Browser: https://github.com/ccontavalli/ssh-ident
+
+Package: ssh-ident
+Architecture: all
+Depends: bash
+Description: ssh-ident - Start and use ssh-agent and load identities as necessary
+ Use this script to start ssh-agents and load ssh keys on demand,
+ when they are first needed.
