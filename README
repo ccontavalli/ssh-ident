@@ -28,11 +28,12 @@ DESCRIPTION
       sessions you have, no matter if your home is shared via NFS.
     
     - can prepare and use a different agent and different set of keys depending
-      on the host you are connecting to, or the directory you are using ssh from.
+      on the host you are connecting to, or the directory you are using ssh
+      from.
       This allows for isolating keys when using agent forwarding with different
-      sites (eg, university, work, home, secret evil internet identity, ...). It
-      also allows to use multiple accounts on sites like github, unfuddle and
-      gitorious easily.
+      sites (eg, university, work, home, secret evil internet identity, ...).
+      It also allows to use multiple accounts on sites like github, unfuddle
+      and gitorious easily.
     
     - allows to specify different options for each set of keys. For example, you
       can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
@@ -82,7 +83,16 @@ DESCRIPTION
         alias rsync='BINARY_SSH=rsync /path/to/ssh-ident'
         ...
     
-    3) Use command specific methods, for example:
+       The first alias will make the 'scp' command invoke 'ssh-ident' instead,
+       but tell 'ssh-ident' to invoke 'scp' instead of the plain 'ssh' command
+       after loading the necessary agents and keys.
+    
+       Note that aliases don't work from scripts - if you have any script that
+       you expect to use with ssh-ident, you may prefer method 1), or you will
+       need to update the script accordingly.
+    
+    3) Use command specific methods to force them to use ssh-ident instead of
+       ssh, for example:
     
         rsync -e '/path/to/ssh-ident' ...
         scp -S '/path/to/ssh-ident' ...
@@ -195,12 +205,37 @@ DESCRIPTION
     To point somewhere else if you so desire.
     
     
+    BUILDING A DEBIAN PACKAGE
+    =========================
+    
+    If you need to use ssh-ident on a debian / ubuntu / or any other
+    derivate, you can now build debian packages.
+    
+      1. Make sure you have devscripts installed:
+    
+        sudo apt-get install devscripts
+    
+      2. Download ssh-ident in a directory of your choice (ssh-ident)
+      
+        git clone https://github.com/ccontavalli/ssh-ident.git ssh-ident
+    
+      3. Build the .deb package:
+    
+        cd ssh-ident && debuild
+    
+      4. Profit:
+      
+        cd ..; dpkg -i ssh-ident*.deb
+    
+    
     CREDITS
     =======
     
     - Carlo Contavalli, http://www.github.com/ccontavalli, main author.
     - Hubert depesz Lubaczewski, http://www.github.com/despez, support
       for using environment variables for configuration.
+    - Flip Hess, http://www.github.com/fliphess, support for building
+      a .deb out of ssh-ident.
 
 CLASSES
     __builtin__.object
