@@ -38,30 +38,39 @@ DESCRIPTION
     - allows to specify different options for each set of keys. For example, you
       can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
       always ask for confirmation before using a key.
-    
-    
+
+
+    Requirements
+    ============
+
+    All you need to run ssh-ident is python2 >= 2.6 or any python3 version.
+
+    No other external library or module is required: all you need to do is
+    download this script and install it!
+
+  
     Simple use
     ==========
-    
+ 
     In .bashrc, I have:
-    
+
       alias ssh=/home/ccontavalli/scripts/ssh-ident
-    
+  
     all I have to do now is logout, login and then:
-    
+
       $ ssh somewhere
-    
+
     ssh-ident will be called instead of ssh, and it will:
     - check if an agent is running. If not, it will start one.
     - try to load all the keys in ~/.ssh, if not loaded.
     
     If I now ssh again, or somewhere else, ssh-ident will reuse the same agent
     and the same keys, if valid.
-    
-    
+
+
     About scp, rsync, and friends
     =============================
-    
+
     scp, rsync, and most similar tools internally invoke ssh. If you don't tell
     them to use ssh-ident instead, key loading won't work. There are two simple
     ways to solve the problem:
