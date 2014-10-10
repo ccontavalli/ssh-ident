@@ -64,7 +64,7 @@ ways to solve the problem:
 1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to
    ssh-ident in a directory in your PATH before /usr/bin or /bin, similarly
    to what was described previously. For example, add to your .bashrc:
-    
+
     export PATH="~/bin:$PATH"
     ln -s /path/to/ssh-ident ~/bin/ssh
 
@@ -113,7 +113,7 @@ To have multiple identities, all I have to do is:
     (r"opt/work", "work"),
     (r"opt/private", "secret"),
   ]
-  
+
   # If any of the ssh arguments have 'cweb' in it, the 'personal' identity
   # has to be used. For example: "ssh myhost.cweb.com" will have cweb in
   # argv, and the "personal" identity will be used.
@@ -211,7 +211,7 @@ derivate, you can now build debian packages.
     sudo apt-get install devscripts
 
   2. Download ssh-ident in a directory of your choice (ssh-ident)
-  
+
     git clone https://github.com/ccontavalli/ssh-ident.git ssh-ident
 
   3. Build the .deb package:
@@ -219,7 +219,7 @@ derivate, you can now build debian packages.
     cd ssh-ident && debuild
 
   4. Profit:
-  
+
     cd ..; dpkg -i ssh-ident*.deb
 
 
@@ -263,7 +263,7 @@ class Config(object):
       "BINARY_SSH": "/usr/bin/ssh",
 
       # Which identity to use by default if we cannot tell from
-      # the current working directory and/or argv. 
+      # the current working directory and/or argv.
       "DEFAULT_IDENTITY": "$USER",
 
       # Those should really be overridden by the user. Look
@@ -285,7 +285,7 @@ class Config(object):
     """Load configurations from the default user file."""
     path = self.Get("FILE_USER_CONFIG")
     variables = {}
-    try: 
+    try:
       exec(compile(open(path).read(), path, 'exec'), {}, variables)
     except IOError:
       return self
@@ -298,7 +298,7 @@ class Config(object):
     if isinstance(value, str):
       return os.path.expanduser(os.path.expandvars(value))
     return value
- 
+
   def Get(self, parameter):
     """Returns the value of a parameter, or causes the script to exit."""
     if parameter in os.environ:
@@ -395,12 +395,12 @@ def FindKeys(identity, config):
       for match, kind in kinds:
         if match in key:
           found[key.replace(match, "")][kind] = key
-  
+
   if not found:
     print("Warning: no keys found for identity {} in:".format(identity), file=sys.stderr)
     print(directories, file=sys.stderr)
 
-  return found 
+  return found
 
 class AgentManager(object):
   """Manages the ssh-agent for one identity."""
