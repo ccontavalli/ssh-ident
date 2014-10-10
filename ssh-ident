@@ -1,5 +1,4 @@
 #!/usr/bin/python3
-
 """Start and use ssh-agent and load identities as necessary.
 
 Use this script to start ssh-agents and load ssh keys on demand,
@@ -307,9 +306,9 @@ class Config(object):
     if parameter in self.defaults:
       return self.Expand(self.defaults[parameter])
 
-    print((
-        "Parameter '%s' needs to be defined in "
-        "config file or defaults" % parameter), file=sys.stderr)
+    print(
+        "Parameter '{}' needs to be defined in "
+        "config file or defaults".format(parameter), file=sys.stderr)
     sys.exit(2)
 
 def FindIdentityInList(elements, identities):
@@ -396,7 +395,7 @@ def FindKeys(identity, config):
           found[key.replace(match, "")][kind] = key
   
   if not found:
-    print("Warning: no keys found for identity %s in:" % identity, file=sys.stderr)
+    print("Warning: no keys found for identity {} in:".format(identity), file=sys.stderr)
     print(directories, file=sys.stderr)
 
   return found 
@@ -436,7 +435,7 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print("Loading keys:\n    %s" % "\n    ".join(toload), file=sys.stderr)
+      print("Loading keys:\n    {}".format( "\n    ".join(toload)), file=sys.stderr)
       self.LoadKeyFiles(toload)
     else:
       print("All keys already loaded", file=sys.stderr)
@@ -474,7 +473,7 @@ class AgentManager(object):
     keys = " ".join(keys)
     options = self.config.Get("SSH_ADD_OPTIONS").get(
         self.identity, self.config.Get("SSH_ADD_DEFAULT_OPTIONS"))
-    self.RunShellCommandInAgent(self.agent_file, "ssh-add %s %s" % (options, keys))
+    self.RunShellCommandInAgent(self.agent_file, "ssh-add {} {}".format(options, keys))
 
   def GetLoadedKeys(self):
     """Returns an iterable of strings, each the fingerprint of a loaded key."""
@@ -494,7 +493,7 @@ class AgentManager(object):
   @staticmethod
   def GetPublicKeyFingerprint(key):
     """Returns the fingerprint of a public key as a string."""
-    retval, stdout = AgentManager.RunShellCommand("ssh-keygen -l -f %s |tr -s ' '" % key)
+    retval, stdout = AgentManager.RunShellCommand("ssh-keygen -l -f {} |tr -s ' '".format(key))
     if retval:
       return None
 
@@ -521,18 +520,18 @@ class AgentManager(object):
     except OSError as e:
       if e.errno != errno.EEXIST:
         raise OSError(
-            "Cannot create agents directory, try manually with 'mkdir -p %s'" %
-            path)
+            "Cannot create agents directory, try manually with 'mkdir -p {}'".format(
+            path))
 
     # Use the hostname as part of the path just in case this is on NFS.
-    agentfile = os.path.join(path, "agent-%s-%s" % (identity, socket.gethostname()))
+    agentfile = os.path.join(path, "agent-{}-{}".format((identity, socket.gethostname())))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
-      print("Agent for identity %s ready" % identity, file=sys.stderr)
+      print("Agent for identity {} ready".format(identity), file=sys.stderr)
       return agentfile
 
-    print("Preparing new agent for identity %s" % identity, file=sys.stderr)
+    print("Preparing new agent for identity {}".format(identity), file=sys.stderr)
     retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > %s" % agentfile])
+        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {}".format(agentfile)])
     return agentfile
 
   @staticmethod
@@ -540,7 +539,7 @@ class AgentManager(object):
     """Returns true if the specified agentfile refers to a running agent."""
     retval, output = AgentManager.RunShellCommandInAgent(agentfile, "ssh-add -l >/dev/null 2>/dev/null") 
     if retval & 0xff not in [0, 1]:
-      print("Agent in %s not running" % agentfile, file=sys.stderr)
+      print("Agent in {} not running".format(agentfile), file=sys.stderr)
       return False
     return True
 
@@ -556,7 +555,7 @@ class AgentManager(object):
   def RunShellCommandInAgent(agentfile, command):
     """Runs a shell command with an agent configured in the environment."""
     command = ["/usr/bin/env", "-i", "/bin/sh", "-c",
-               ". %s >/dev/null 2>/dev/null; %s" % (agentfile, command)]
+               ". {} >/dev/null 2>/dev/null; {}".format(agentfile, command)]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
     return process.wait(), stdout
@@ -566,15 +565,15 @@ class AgentManager(object):
     """Escapes all arguments to the shell, returns a string."""
     escaped = []
     for arg in argv:
-      escaped.append("'%s'" % arg.replace("'", "'\"'\"'"))
+      escaped.append("'{}'".format(arg.replace("'", "'\"'\"'")))
     return " ".join(escaped)
 
   def RunSSH(self, argv):
     """Execs ssh with the specified arguments."""
-    command = ["/bin/sh", "-c", ". %s >/dev/null 2>/dev/null; exec %s %s" % (
+    command = ["/bin/sh", "-c", ". {} >/dev/null 2>/dev/null; exec {} {}".format(
                self.agent_file, self.config.Get("BINARY_SSH"),
                self.EscapeShellArguments(argv))]
-    os.execv("/bin/sh", command) 
+    os.execv("/bin/sh", command)
 
 def main(argv):
   # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
