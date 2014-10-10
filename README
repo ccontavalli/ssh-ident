@@ -38,39 +38,39 @@ DESCRIPTION
     - allows to specify different options for each set of keys. For example, you
       can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
       always ask for confirmation before using a key.
-
-
+    
+    
     Requirements
     ============
-
+    
     All you need to run ssh-ident is python2 >= 2.6 or any python3 version.
-
+    
     No other external library or module is required: all you need to do is
     download this script and install it!
-
-  
+    
+    
     Simple use
     ==========
- 
+    
     In .bashrc, I have:
-
+    
       alias ssh=/home/ccontavalli/scripts/ssh-ident
-  
+    
     all I have to do now is logout, login and then:
-
+    
       $ ssh somewhere
-
+    
     ssh-ident will be called instead of ssh, and it will:
     - check if an agent is running. If not, it will start one.
     - try to load all the keys in ~/.ssh, if not loaded.
     
     If I now ssh again, or somewhere else, ssh-ident will reuse the same agent
     and the same keys, if valid.
-
-
+    
+    
     About scp, rsync, and friends
     =============================
-
+    
     scp, rsync, and most similar tools internally invoke ssh. If you don't tell
     them to use ssh-ident instead, key loading won't work. There are two simple
     ways to solve the problem:
@@ -78,7 +78,7 @@ DESCRIPTION
     1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to
        ssh-ident in a directory in your PATH before /usr/bin or /bin, similarly
        to what was described previously. For example, add to your .bashrc:
-        
+    
         export PATH="~/bin:$PATH"
         ln -s /path/to/ssh-ident ~/bin/ssh
     
@@ -127,7 +127,7 @@ DESCRIPTION
         (r"opt/work", "work"),
         (r"opt/private", "secret"),
       ]
-      
+    
       # If any of the ssh arguments have 'cweb' in it, the 'personal' identity
       # has to be used. For example: "ssh myhost.cweb.com" will have cweb in
       # argv, and the "personal" identity will be used.
@@ -225,7 +225,7 @@ DESCRIPTION
         sudo apt-get install devscripts
     
       2. Download ssh-ident in a directory of your choice (ssh-ident)
-      
+    
         git clone https://github.com/ccontavalli/ssh-ident.git ssh-ident
     
       3. Build the .deb package:
@@ -233,7 +233,7 @@ DESCRIPTION
         cd ssh-ident && debuild
     
       4. Profit:
-      
+    
         cd ..; dpkg -i ssh-ident*.deb
     
     
@@ -245,6 +245,7 @@ DESCRIPTION
       for using environment variables for configuration.
     - Flip Hess, http://www.github.com/fliphess, support for building
       a .deb out of ssh-ident.
+    - Terrel Shumway, https://www.github.com/scholarly, port to python3.
 
 CLASSES
     __builtin__.object
@@ -414,5 +415,8 @@ FUNCTIONS
           configuration parameters.
     
     main(argv)
+
+DATA
+    print_function = _Feature((2, 6, 0, 'alpha', 2), (3, 0, 0, 'alpha', 0)...
 
 

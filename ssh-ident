@@ -1,5 +1,4 @@
 #!/usr/bin/python
-from __future__ import print_function
 """Start and use ssh-agent and load identities as necessary.
 
 Use this script to start ssh-agents and load ssh keys on demand,
@@ -33,6 +32,15 @@ In any case, ssh-ident:
 - allows to specify different options for each set of keys. For example, you
   can provide a -t 60 to keep keys loaded for at most 60 seconds. Or -c to
   always ask for confirmation before using a key.
+
+
+Requirements
+============
+
+All you need to run ssh-ident is python2 >= 2.6 or any python3 version.
+
+No other external library or module is required: all you need to do is
+download this script and install it!
 
 
 Simple use
@@ -233,6 +241,8 @@ CREDITS
   a .deb out of ssh-ident.
 - Terrel Shumway, https://www.github.com/scholarly, port to python3.
 """
+
+from __future__ import print_function
 
 import glob
 import sys
