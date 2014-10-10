@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 """Start and use ssh-agent and load identities as necessary.
 
@@ -285,7 +285,7 @@ class Config(object):
     path = self.Get("FILE_USER_CONFIG")
     variables = {}
     try: 
-      execfile(path, {}, variables)
+      exec(compile(open(path).read(), path, 'exec'), {}, variables)
     except IOError:
       return self
     self.values = variables
@@ -307,9 +307,9 @@ class Config(object):
     if parameter in self.defaults:
       return self.Expand(self.defaults[parameter])
 
-    print >>sys.stderr, (
+    print((
         "Parameter '%s' needs to be defined in "
-        "config file or defaults" % parameter)
+        "config file or defaults" % parameter), file=sys.stderr)
     sys.exit(2)
 
 def FindIdentityInList(elements, identities):
@@ -373,7 +373,7 @@ def FindKeys(identity, config):
   for directory in directories:
     try:
       keyfiles = os.listdir(directory)
-    except OSError, e:
+    except OSError as e:
       if e.errno == errno.ENOENT:
         continue
       raise
@@ -396,8 +396,8 @@ def FindKeys(identity, config):
           found[key.replace(match, "")][kind] = key
   
   if not found:
-    print >>sys.stderr, "Warning: no keys found for identity %s in:" % identity
-    print >>sys.stderr, directories
+    print("Warning: no keys found for identity %s in:" % identity, file=sys.stderr)
+    print(directories, file=sys.stderr)
 
   return found 
 
@@ -436,10 +436,10 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print >>sys.stderr, "Loading keys:\n    %s" % "\n    ".join(toload)
+      print("Loading keys:\n    %s" % "\n    ".join(toload), file=sys.stderr)
       self.LoadKeyFiles(toload)
     else:
-      print >>sys.stderr, "All keys already loaded"
+      print("All keys already loaded", file=sys.stderr)
 
   def FindUnloadedKeys(self, keys):
     """Determines which keys have not been loaded yet.
@@ -452,7 +452,7 @@ class AgentManager(object):
     """
     loaded = set(self.GetLoadedKeys())
     toload = set()
-    for key, config in keys.iteritems():
+    for key, config in keys.items():
       if "pub" not in config:
         continue
       if "priv" not in config:
@@ -483,7 +483,7 @@ class AgentManager(object):
       return []
 
     fingerprints = []
-    for line in stdout.split("\n"):
+    for line in stdout.decode("utf-8").split("\n"):
       try:
         _, fingerprint, _ = line.split(" ", 2)
         fingerprints.append(fingerprint)
@@ -499,7 +499,7 @@ class AgentManager(object):
       return None
 
     try:
-      _, fingerprint, _ = stdout.split(" ", 2)
+      _, fingerprint, _ = stdout.decode("utf-8").split(" ", 2)
     except ValueError:
       return None
     return fingerprint
@@ -517,8 +517,8 @@ class AgentManager(object):
     """
     # Create the paths, if they do not exist yet.
     try:
-      os.makedirs(path, 0700)
-    except OSError, e:
+      os.makedirs(path, 0o700)
+    except OSError as e:
       if e.errno != errno.EEXIST:
         raise OSError(
             "Cannot create agents directory, try manually with 'mkdir -p %s'" %
@@ -527,10 +527,10 @@ class AgentManager(object):
     # Use the hostname as part of the path just in case this is on NFS.
     agentfile = os.path.join(path, "agent-%s-%s" % (identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
-      print >>sys.stderr, "Agent for identity %s ready" % identity
+      print("Agent for identity %s ready" % identity, file=sys.stderr)
       return agentfile
 
-    print >>sys.stderr, "Preparing new agent for identity %s" % identity
+    print("Preparing new agent for identity %s" % identity, file=sys.stderr)
     retval = subprocess.call(
         ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > %s" % agentfile])
     return agentfile
@@ -540,7 +540,7 @@ class AgentManager(object):
     """Returns true if the specified agentfile refers to a running agent."""
     retval, output = AgentManager.RunShellCommandInAgent(agentfile, "ssh-add -l >/dev/null 2>/dev/null") 
     if retval & 0xff not in [0, 1]:
-      print >>sys.stderr, "Agent in %s not running" % agentfile
+      print("Agent in %s not running" % agentfile, file=sys.stderr)
       return False
     return True
 
@@ -594,4 +594,4 @@ if __name__ == "__main__":
   try:
     sys.exit(main(sys.argv))
   except KeyboardInterrupt:
-    print >>sys.stderr, "Goodbye"
+    print("Goodbye", file=sys.stderr)
