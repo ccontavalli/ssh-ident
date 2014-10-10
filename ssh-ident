@@ -231,6 +231,7 @@ CREDITS
   for using environment variables for configuration.
 - Flip Hess, http://www.github.com/fliphess, support for building
   a .deb out of ssh-ident.
+- Terrel Shumway, https://www.github.com/scholarly, port to python3.
 """
 
 import glob
