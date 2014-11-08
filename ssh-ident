@@ -157,6 +157,11 @@ To have multiple identities, all I have to do is:
     "secret": "-t 600",
   }
 
+  # Which options to use by default if no match with SSH_ADD_OPTIONS
+  # was found. Note that ssh-ident hard codes -t 7200 to prevent your
+  # keys from remaining in memory for too long.
+  SSH_ADD_DEFAULT_OPTIONS = "-t 7200"
+
 2) Create the directory where all the identities and agents
    will be kept:
 
