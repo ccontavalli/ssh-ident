@@ -292,8 +292,9 @@ class Config(object):
       # Dictionary with identity as a key, allows to specify
       # per identity options when using ssh-add.
       "SSH_ADD_OPTIONS": {},
-      # ssh-add default options.
-      "SSH_ADD_DEFAULT_OPTIONS": "",
+      # ssh-add default options. By default, don't keep a key longer
+      # than 2 hours.
+      "SSH_ADD_DEFAULT_OPTIONS": "-t 7200",
   }
 
   def __init__(self):
