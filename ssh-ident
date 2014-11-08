@@ -34,17 +34,25 @@ In any case, ssh-ident:
   always ask for confirmation before using a key.
 
 
-Requirements
+Installation
 ============
 
-All you need to run ssh-ident is python2 >= 2.6 or any python3 version.
+All you need to run ssh-ident is a standard installation of python >= 2.6,
+python > 3 is supported.
 
-No other external library or module is required: all you need to do is
-download this script and install it!
+If your system has wget and are impatient to use it, you can install
+ssh-ident with two simple commands:
+
+   mkdir -p ~/bin; wget -O ~/bin/ssh goo.gl/MoJuKB; chmod 0755 ~/bin/ssh
+
+   echo 'export PATH=~/bin:$PATH' >> ~/.bashrc
+
+Logout, login, and done. SSH should now invoke ssh-ident instead of the
+standard ssh.
 
 
-Simple use
-==========
+Alternatives
+============
 
 In .bashrc, I have:
 
