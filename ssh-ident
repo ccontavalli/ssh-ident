@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# vim: tabstop=2 shiftwidth=2 expandtab
 """Start and use ssh-agent and load identities as necessary.
 
 Use this script to start ssh-agents and load ssh keys on demand,
