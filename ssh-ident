@@ -269,6 +269,34 @@ import subprocess
 import collections
 
 
+class SshIdentPrint(object):
+  """Wrapper around python's print function."""
+
+  def __init__(self, config):
+    """
+      config: object implementing the Config interface, allows access to
+          the user configuration parameters.
+
+    Attributes:
+      config: same as above.
+      python_print: python's print function (hopefully)
+
+    Parameters:
+      SSH_BATCH_MODE: used to check if messages should be printed or not
+    """
+    self.config = config
+    self.python_print = print
+
+  def write(self, *args, **kwargs):
+    """Passes all parameters to python's print,
+    unless output is disabled by the configuration."""
+    if self.config.Get("SSH_BATCH_MODE"):
+      # no output in BatchMode
+      return
+    self.python_print(*args, **kwargs)
+
+  __call__ = write
+
 class Config(object):
   """Holds and loads users configurations."""
 
@@ -301,6 +329,11 @@ class Config(object):
       # ssh-add default options. By default, don't keep a key longer
       # than 2 hours.
       "SSH_ADD_DEFAULT_OPTIONS": "-t 7200",
+
+      # Like BatchMode in ssh, see man 5 ssh_config.
+      # In BatchMode ssh-ident will not print any output and not ask for
+      # any passphrases.
+      "SSH_BATCH_MODE": False,
   }
 
   def __init__(self):
@@ -337,6 +370,10 @@ class Config(object):
         "Parameter '{}' needs to be defined in "
         "config file or defaults".format(parameter), file=sys.stderr)
     sys.exit(2)
+
+  def Set(self, parameter, value):
+    """Sets configuration option parameter to value."""
+    self.values[parameter] = value
 
 def FindIdentityInList(elements, identities):
   """Matches a list of identities to a list of elements.
@@ -608,6 +645,31 @@ class AgentManager(object):
             self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command)
 
+def ParseCommandLine(argv, config):
+  """Parses the command line parameters in argv
+  and modified config accordingly."""
+  # This function may need a lot of refactoring if it is ever used for more
+  # than checking for BatchMode for OpenSSH...
+  binary = os.path.basename(config.Get("BINARY_SSH"))
+  if binary == 'ssh' or binary == 'scp':
+    # OpenSSH accepts -o Options as well as -oOption,
+    # so let's convert argv to the latter form first
+    i = iter(argv)
+    argv = [p+next(i, '') if p == '-o' else p for p in i]
+    # OpenSSH accepts 'Option=yes' and 'Option yes', 'true' instead of 'yes'
+    # and treats everything case-insensitive
+    # if an option is given multiple times,
+    # OpenSSH considers the first occurrence only
+    re_batchmode = re.compile(r"-oBatchMode[= ](yes|true)", re.IGNORECASE)
+    re_nobatchmode = re.compile(r"-oBatchMode[= ](no|false)", re.IGNORECASE)
+    for p in argv:
+      if re.match(re_batchmode, p):
+        config.Set("SSH_BATCH_MODE", True)
+        break
+      elif re.match(re_nobatchmode, p):
+        config.Set("SSH_BATCH_MODE", False)
+        break
+
 def main(argv):
   # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
   # that use ssh in case we error out or similar.
@@ -615,11 +677,17 @@ def main(argv):
   sys.stderr = open("/dev/tty", "w")
 
   config = Config().Load()
+  # overwrite python's print function with the wrapper SshIdentPrint
+  global print
+  print = SshIdentPrint(config)
+  ParseCommandLine(argv, config)
   identity = FindIdentity(argv, config)
   agent = AgentManager(identity, config)
   keys = FindKeys(identity, config)
 
-  agent.LoadUnloadedKeys(keys)
+  if not config.Get("SSH_BATCH_MODE"):
+    # do not load keys in BatchMode
+    agent.LoadUnloadedKeys(keys)
   return agent.RunSSH(argv[1:])
 
 if __name__ == "__main__":
