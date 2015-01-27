@@ -163,6 +163,10 @@ To have multiple identities, all I have to do is:
   # keys from remaining in memory for too long.
   SSH_ADD_DEFAULT_OPTIONS = "-t 7200"
 
+  # Output verbosity
+  # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
+  VERBOSITY = LOG_INFO
+
 2) Create the directory where all the identities and agents
    will be kept:
 
@@ -269,6 +273,13 @@ import subprocess
 import collections
 
 
+# constants so noone has deal with cryptic numbers
+LOG_CONSTANTS = {"LOG_ERROR": 1, "LOG_WARN": 2, "LOG_INFO": 3, "LOG_DEBUG": 4}
+# load them directly into the global scope, for easy use
+# not exactly pretty...
+globals().update(LOG_CONSTANTS)
+
+
 class SshIdentPrint(object):
   """Wrapper around python's print function."""
 
@@ -283,17 +294,41 @@ class SshIdentPrint(object):
 
     Parameters:
       SSH_BATCH_MODE: used to check if messages should be printed or not
+      VERBOSITY: used to check if messages should be printed or not
     """
     self.config = config
     self.python_print = print
 
   def write(self, *args, **kwargs):
     """Passes all parameters to python's print,
-    unless output is disabled by the configuration."""
+    unless output is disabled by the configuration.
+    The interface is compatible with python's print, but supports the
+    optional paramter 'loglevel' in addition."""
     if self.config.Get("SSH_BATCH_MODE"):
       # no output in BatchMode
       return
-    self.python_print(*args, **kwargs)
+    # determine the loglevel of this message
+    if "loglevel" in kwargs:
+      loglevel = kwargs["loglevel"]
+      # make sure not to pass the loglevel parameter to print
+      del kwargs["loglevel"]
+    else:
+      # if the loglevel is not given, default to INFO
+      loglevel = LOG_INFO
+    # determine the current output verbosity
+    verbosity = self.config.Get("VERBOSITY")
+    # verbosity may be a string, e.g. 'LOG_INFO'
+    # this happens when it comes from the OS env, but also if quotes are
+    # used in the config file
+    if isinstance(verbosity, str):
+      if verbosity in LOG_CONSTANTS:
+        # resolve the loglevel, e.g. 'LOG_INFO' -> 3
+        verbosity = LOG_CONSTANTS[verbosity]
+      else:
+        # the string may also be a number, e.g. '3' -> 3
+        verbosity = int(verbosity)
+    if loglevel <= verbosity:
+      self.python_print(*args, **kwargs)
 
   __call__ = write
 
@@ -334,6 +369,11 @@ class Config(object):
       # In BatchMode ssh-ident will not print any output and not ask for
       # any passphrases.
       "SSH_BATCH_MODE": False,
+
+      # Output verbosity
+      # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
+      # use 0 to disable ALL output (not recommended!)
+      "VERBOSITY": LOG_INFO,
   }
 
   def __init__(self):
@@ -344,7 +384,7 @@ class Config(object):
     path = self.Get("FILE_USER_CONFIG")
     variables = {}
     try:
-      exec(compile(open(path).read(), path, 'exec'), {}, variables)
+      exec(compile(open(path).read(), path, 'exec'), LOG_CONSTANTS, variables)
     except IOError:
       return self
     self.values = variables
@@ -368,7 +408,8 @@ class Config(object):
 
     print(
         "Parameter '{}' needs to be defined in "
-        "config file or defaults".format(parameter), file=sys.stderr)
+        "config file or defaults".format(parameter), file=sys.stderr,
+        loglevel=LOG_ERROR)
     sys.exit(2)
 
   def Set(self, parameter, value):
@@ -459,8 +500,10 @@ def FindKeys(identity, config):
           found[key.replace(match, "")][kind] = key
 
   if not found:
-    print("Warning: no keys found for identity {} in:".format(identity), file=sys.stderr)
-    print(directories, file=sys.stderr)
+    print("Warning: no keys found for identity {} in:".format(identity),
+        file=sys.stderr,
+        loglevel=LOG_WARN)
+    print(directories, file=sys.stderr, loglevel=LOG_WARN)
 
   return found
 
@@ -499,10 +542,11 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print("Loading keys:\n    {}".format( "\n    ".join(toload)), file=sys.stderr)
+      print("Loading keys:\n    {}".format( "\n    ".join(toload)),
+          file=sys.stderr, loglevel=LOG_INFO)
       self.LoadKeyFiles(toload)
     else:
-      print("All keys already loaded", file=sys.stderr)
+      print("All keys already loaded", file=sys.stderr, loglevel=LOG_INFO)
 
   def FindUnloadedKeys(self, keys):
     """Determines which keys have not been loaded yet.
@@ -593,10 +637,12 @@ class AgentManager(object):
     agentfile = os.path.join(
         path, "agent-{}-{}".format(identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
-      print("Agent for identity {} ready".format(identity), file=sys.stderr)
+      print("Agent for identity {} ready".format(identity), file=sys.stderr,
+          loglevel=LOG_DEBUG)
       return agentfile
 
-    print("Preparing new agent for identity {}".format(identity), file=sys.stderr)
+    print("Preparing new agent for identity {}".format(identity), file=sys.stderr,
+        loglevel=LOG_DEBUG)
     retval = subprocess.call(
         ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {}".format(agentfile)])
     return agentfile
@@ -607,7 +653,8 @@ class AgentManager(object):
     retval, output = AgentManager.RunShellCommandInAgent(
         agentfile, "ssh-add -l >/dev/null 2>/dev/null")
     if retval & 0xff not in [0, 1]:
-      print("Agent in {} not running".format(agentfile), file=sys.stderr)
+      print("Agent in {} not running".format(agentfile), file=sys.stderr,
+          loglevel=LOG_DEBUG)
       return False
     return True
 
@@ -694,4 +741,4 @@ if __name__ == "__main__":
   try:
     sys.exit(main(sys.argv))
   except KeyboardInterrupt:
-    print("Goodbye", file=sys.stderr)
+    print("Goodbye", file=sys.stderr, loglevel=LOG_DEBUG)

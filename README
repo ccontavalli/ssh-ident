@@ -168,6 +168,10 @@ DESCRIPTION
       # keys from remaining in memory for too long.
       SSH_ADD_DEFAULT_OPTIONS = "-t 7200"
     
+      # Output verbosity
+      # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
+      VERBOSITY = LOG_INFO
+    
     2) Create the directory where all the identities and agents
        will be kept:
     
