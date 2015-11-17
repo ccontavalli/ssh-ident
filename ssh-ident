@@ -346,6 +346,10 @@ class Config(object):
 
       # How to identify key files in the identities directory.
       "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)",
+
+      # How to identify ssh config files
+      "PATTERN_CONFIG": r"/config$",
+
       # Complete path of full ssh binary to use.
       "BINARY_SSH": "/usr/bin/ssh",
 
@@ -507,10 +511,42 @@ def FindKeys(identity, config):
 
   return found
 
+
+def FindSSHConfig(identity, config):
+  """Finds a config file if there's one associated with an identity
+
+  Args:
+    identity: string, name of the identity to load strings of.
+    config: object implementing the Config interface, providing configurations
+        for the user.
+
+  Returns:
+    string, the configuration file to use
+  """
+  directories = [os.path.join(config.Get("DIR_IDENTITIES"), identity)]
+  directories.append(os.path.expanduser("~/.ssh"))
+
+  pattern = re.compile(config.Get("PATTERN_CONFIG"))
+  sshconfigs = collections.defaultdict(dict)
+  for directory in directories:
+    try:
+      sshconfigs = os.listdir(directory)
+    except OSError as e:
+      if e.errno == errno.ENOENT:
+        continue
+      raise
+
+    for sshconfig in sshconfigs:
+      sshconfig = os.path.join(directory, sshconfig)
+      if os.path.isfile(sshconfig) and pattern.search(sshconfig):
+        return sshconfig
+
+  return False
+
 class AgentManager(object):
   """Manages the ssh-agent for one identity."""
 
-  def __init__(self, identity, config):
+  def __init__(self, identity, sshconfig, config):
     """Initializes an AgentManager object.
 
     Args:
@@ -531,6 +567,7 @@ class AgentManager(object):
     """
     self.identity = identity
     self.config = config
+    self.ssh_config = sshconfig
     self.agents_path = os.path.abspath(config.Get("DIR_AGENTS"))
     self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
 
@@ -685,11 +722,15 @@ class AgentManager(object):
 
   def RunSSH(self, argv):
     """Execs ssh with the specified arguments."""
+    additional_flags = ""
+    if (self.ssh_config):
+      additional_flags += " -F {}".format(self.ssh_config)
+
     command = [
         "/bin/sh", "-c",
-        ". {} >/dev/null 2>/dev/null; exec {} {}".format(
+        ". {} >/dev/null 2>/dev/null; exec {} {} {}".format(
             self.agent_file, self.config.Get("BINARY_SSH"),
-            self.EscapeShellArguments(argv))]
+            additional_flags, self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command)
 
 def ParseCommandLine(argv, config):
@@ -729,8 +770,9 @@ def main(argv):
   print = SshIdentPrint(config)
   ParseCommandLine(argv, config)
   identity = FindIdentity(argv, config)
-  agent = AgentManager(identity, config)
   keys = FindKeys(identity, config)
+  sshconfig = FindSSHConfig(identity, config)
+  agent = AgentManager(identity, sshconfig, config)
 
   if not config.Get("SSH_BATCH_MODE"):
     # do not load keys in BatchMode
