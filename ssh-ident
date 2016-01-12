@@ -524,7 +524,6 @@ def FindSSHConfig(identity, config):
     string, the configuration file to use
   """
   directories = [os.path.join(config.Get("DIR_IDENTITIES"), identity)]
-  directories.append(os.path.expanduser("~/.ssh"))
 
   pattern = re.compile(config.Get("PATTERN_CONFIG"))
   sshconfigs = collections.defaultdict(dict)
