@@ -722,7 +722,7 @@ class AgentManager(object):
 
   def RunSSH(self, argv):
     """Execs ssh with the specified arguments."""
-    additional_flags = ""
+    additional_flags = "-oUseRoaming=no"
     if (self.ssh_config):
       additional_flags += " -F {}".format(self.ssh_config)
 
