@@ -163,6 +163,24 @@ DESCRIPTION
         "secret": "-t 600",
       }
     
+      # This is option - dont' include any SSH_OPTIONS if you don't
+      # need it.
+      # Otherwise, provides options to be passed to 'ssh' for specifc
+      # identities.
+      "SSH_OPTIONS": {
+        # Disable forwarding of the agent, but enable X forwarding,
+        # when using the work profile.
+        "work": "-Xa",
+    
+        # Always forward the agent when using the secret identity.
+        "secret": "-A"
+      },
+    
+      # Options to pass to ssh by default.
+      # If you don't specify anything, UserRoaming=no is passed, due
+      # to CVE-2016-0777. Leave it empty to disable this.
+      "SSH_DEFAULT_OPTIONS": "-oUseRoaming=no",
+    
       # Which options to use by default if no match with SSH_ADD_OPTIONS
       # was found. Note that ssh-ident hard codes -t 7200 to prevent your
       # keys from remaining in memory for too long.
@@ -263,11 +281,19 @@ DESCRIPTION
     - Flip Hess, http://www.github.com/fliphess, support for building
       a .deb out of ssh-ident.
     - Terrel Shumway, https://www.github.com/scholarly, port to python3.
+    - black2754, https://www.github.com/black2754, vim modeline, support
+      for verbosity settings, and BatchMode passing.
+    - Michael Heap, https://www.github.com/mheap, support for per
+      identities config files.
+    - Carl Drougge, https://www.github.com/drougge, CVE-2016-0777 fix,
+      fix for per user config files, and use /bin/env instead of python
+      path.
 
 CLASSES
     __builtin__.object
         AgentManager
         Config
+        SshIdentPrint
     
     class AgentManager(__builtin__.object)
      |  Manages the ssh-agent for one identity.
@@ -286,6 +312,9 @@ CLASSES
      |  GetLoadedKeys(self)
      |      Returns an iterable of strings, each the fingerprint of a loaded key.
      |  
+     |  GetShellArgs(self)
+     |      Returns the flags to be passed to the shell to run a command.
+     |  
      |  LoadKeyFiles(self, keys)
      |      Load all specified keys.
      |      
@@ -301,7 +330,7 @@ CLASSES
      |  RunSSH(self, argv)
      |      Execs ssh with the specified arguments.
      |  
-     |  __init__(self, identity, config)
+     |  __init__(self, identity, sshconfig, config)
      |      Initializes an AgentManager object.
      |      
      |      Args:
@@ -368,6 +397,9 @@ CLASSES
      |  Load(self)
      |      Load configurations from the default user file.
      |  
+     |  Set(self, parameter, value)
+     |      Sets configuration option parameter to value.
+     |  
      |  __init__(self)
      |  
      |  ----------------------------------------------------------------------
@@ -389,6 +421,40 @@ CLASSES
      |  Data and other attributes defined here:
      |  
      |  defaults = {'BINARY_SSH': '/usr/bin/ssh', 'DEFAULT_IDENTITY': '$USER',...
+    
+    class SshIdentPrint(__builtin__.object)
+     |  Wrapper around python's print function.
+     |  
+     |  Methods defined here:
+     |  
+     |  __call__ = write(self, *args, **kwargs)
+     |  
+     |  __init__(self, config)
+     |        config: object implementing the Config interface, allows access to
+     |            the user configuration parameters.
+     |      
+     |      Attributes:
+     |        config: same as above.
+     |        python_print: python's print function (hopefully)
+     |      
+     |      Parameters:
+     |        SSH_BATCH_MODE: used to check if messages should be printed or not
+     |        VERBOSITY: used to check if messages should be printed or not
+     |  
+     |  write(self, *args, **kwargs)
+     |      Passes all parameters to python's print,
+     |      unless output is disabled by the configuration.
+     |      The interface is compatible with python's print, but supports the
+     |      optional paramter 'loglevel' in addition.
+     |  
+     |  ----------------------------------------------------------------------
+     |  Data descriptors defined here:
+     |  
+     |  __dict__
+     |      dictionary for instance variables (if defined)
+     |  
+     |  __weakref__
+     |      list of weak references to the object (if defined)
 
 FUNCTIONS
     FindIdentity(argv, config)
@@ -431,9 +497,32 @@ FUNCTIONS
           The return value is affected by DIR_IDENTITIES and PATTERN_KEYS
           configuration parameters.
     
+    FindSSHConfig(identity, config)
+        Finds a config file if there's one associated with an identity
+        
+        Args:
+          identity: string, name of the identity to load strings of.
+          config: object implementing the Config interface, providing configurations
+              for the user.
+        
+        Returns:
+          string, the configuration file to use
+    
+    ParseCommandLine(argv, config)
+        Parses the command line parameters in argv
+        and modified config accordingly.
+    
+    ShouldPrint(config, loglevel)
+        Returns true if a message by the specified loglevel should be printed.
+    
     main(argv)
 
 DATA
+    LOG_CONSTANTS = {'LOG_DEBUG': 4, 'LOG_ERROR': 1, 'LOG_INFO': 3, 'LOG_W...
+    LOG_DEBUG = 4
+    LOG_ERROR = 1
+    LOG_INFO = 3
+    LOG_WARN = 2
     print_function = _Feature((2, 6, 0, 'alpha', 2), (3, 0, 0, 'alpha', 0)...
 
 

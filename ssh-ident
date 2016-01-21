@@ -276,6 +276,13 @@ CREDITS
 - Flip Hess, http://www.github.com/fliphess, support for building
   a .deb out of ssh-ident.
 - Terrel Shumway, https://www.github.com/scholarly, port to python3.
+- black2754, https://www.github.com/black2754, vim modeline, support
+  for verbosity settings, and BatchMode passing.
+- Michael Heap, https://www.github.com/mheap, support for per
+  identities config files.
+- Carl Drougge, https://www.github.com/drougge, CVE-2016-0777 fix,
+  fix for per user config files, and use /bin/env instead of python
+  path.
 """
 
 from __future__ import print_function
