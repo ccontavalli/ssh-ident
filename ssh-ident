@@ -158,6 +158,24 @@ To have multiple identities, all I have to do is:
     "secret": "-t 600",
   }
 
+  # This is option - dont' include any SSH_OPTIONS if you don't
+  # need it.
+  # Otherwise, provides options to be passed to 'ssh' for specifc
+  # identities.
+  "SSH_OPTIONS": {
+    # Disable forwarding of the agent, but enable X forwarding,
+    # when using the work profile.
+    "work": "-Xa",
+
+    # Always forward the agent when using the secret identity.
+    "secret": "-A"
+  },
+
+  # Options to pass to ssh by default.
+  # If you don't specify anything, UserRoaming=no is passed, due
+  # to CVE-2016-0777. Leave it empty to disable this.
+  "SSH_DEFAULT_OPTIONS": "-oUseRoaming=no",
+
   # Which options to use by default if no match with SSH_ADD_OPTIONS
   # was found. Note that ssh-ident hard codes -t 7200 to prevent your
   # keys from remaining in memory for too long.
@@ -280,6 +298,26 @@ LOG_CONSTANTS = {"LOG_ERROR": 1, "LOG_WARN": 2, "LOG_INFO": 3, "LOG_DEBUG": 4}
 globals().update(LOG_CONSTANTS)
 
 
+def ShouldPrint(config, loglevel):
+  """Returns true if a message by the specified loglevel should be printed."""
+  # determine the current output verbosity
+  verbosity = config.Get("VERBOSITY")
+
+  # verbosity may be a string, e.g. 'LOG_INFO'
+  # this happens when it comes from the OS env, but also if quotes are
+  # used in the config file
+  if isinstance(verbosity, str):
+    if verbosity in LOG_CONSTANTS:
+      # resolve the loglevel, e.g. 'LOG_INFO' -> 3
+      verbosity = LOG_CONSTANTS[verbosity]
+    else:
+      # the string may also be a number, e.g. '3' -> 3
+      verbosity = int(verbosity)
+  if loglevel <= verbosity:
+    return True
+  return False
+
+
 class SshIdentPrint(object):
   """Wrapper around python's print function."""
 
@@ -307,6 +345,7 @@ class SshIdentPrint(object):
     if self.config.Get("SSH_BATCH_MODE"):
       # no output in BatchMode
       return
+
     # determine the loglevel of this message
     if "loglevel" in kwargs:
       loglevel = kwargs["loglevel"]
@@ -315,22 +354,12 @@ class SshIdentPrint(object):
     else:
       # if the loglevel is not given, default to INFO
       loglevel = LOG_INFO
-    # determine the current output verbosity
-    verbosity = self.config.Get("VERBOSITY")
-    # verbosity may be a string, e.g. 'LOG_INFO'
-    # this happens when it comes from the OS env, but also if quotes are
-    # used in the config file
-    if isinstance(verbosity, str):
-      if verbosity in LOG_CONSTANTS:
-        # resolve the loglevel, e.g. 'LOG_INFO' -> 3
-        verbosity = LOG_CONSTANTS[verbosity]
-      else:
-        # the string may also be a number, e.g. '3' -> 3
-        verbosity = int(verbosity)
-    if loglevel <= verbosity:
+
+    if ShouldPrint(self.config, loglevel):
       self.python_print(*args, **kwargs)
 
   __call__ = write
+
 
 class Config(object):
   """Holds and loads users configurations."""
@@ -347,8 +376,14 @@ class Config(object):
       # How to identify key files in the identities directory.
       "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)",
 
-      # How to identify ssh config files
+      # How to identify ssh config files.
       "PATTERN_CONFIG": r"/config$",
+
+      # Dictionary with identity as a key, automatically adds
+      # the specified options to the ssh command run.
+      "SSH_OPTIONS": {},
+      # Additional options to append to ssh by default.
+      "SSH_DEFAULT_OPTIONS": "-oUseRoaming=no",
 
       # Complete path of full ssh binary to use.
       "BINARY_SSH": "/usr/bin/ssh",
@@ -719,14 +754,22 @@ class AgentManager(object):
       escaped.append("'{}'".format(arg.replace("'", "'\"'\"'")))
     return " ".join(escaped)
 
+  def GetShellArgs(self):
+    """Returns the flags to be passed to the shell to run a command."""
+    shell_args = "-c"
+    if ShouldPrint(self.config, LOG_DEBUG):
+      shell_args = "-xc"
+    return shell_args
+
   def RunSSH(self, argv):
     """Execs ssh with the specified arguments."""
-    additional_flags = ""
+    additional_flags = self.config.Get("SSH_OPTIONS").get(
+        self.identity, self.config.Get("SSH_DEFAULT_OPTIONS"))
     if (self.ssh_config):
       additional_flags += " -F {}".format(self.ssh_config)
 
     command = [
-        "/bin/sh", "-c",
+        "/bin/sh", self.GetShellArgs(),
         ". {} >/dev/null 2>/dev/null; exec {} {} {}".format(
             self.agent_file, self.config.Get("BINARY_SSH"),
             additional_flags, self.EscapeShellArguments(argv))]
