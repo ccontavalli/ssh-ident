@@ -80,19 +80,31 @@ DESCRIPTION
     =============================
     
     scp, rsync, and most similar tools internally invoke ssh. If you don't tell
-    them to use ssh-ident instead, key loading won't work. There are two simple
-    ways to solve the problem:
+    them to use ssh-ident instead, key loading won't work. There are three ways
+    to solve the problem:
     
     1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to
        ssh-ident in a directory in your PATH before /usr/bin or /bin, similarly
        to what was described previously. For example, add to your .bashrc:
     
         export PATH="~/bin:$PATH"
+
+       And run:
+
         ln -s /path/to/ssh-ident ~/bin/ssh
     
        Make sure `echo $PATH` shows '~/bin' *before* '/usr/bin' or '/bin'. You
        can verify this is working as expected with `which ssh`, which should
        show ~/bin/ssh.
+
+       This works for rsync and git, among others, but not for scp and sftp, as
+       these do not look for ssh in your PATH but use a hard-coded path to the
+       binary.
+       If you want to use ssh-ident with scp or sftp,  you can simply create
+       symlinks for them as well:
+
+        ln -s /path/to/ssh-ident ~/bin/scp
+        ln -s /path/to/ssh-ident ~/bin/sftp
     
     2) Add a few more aliases in your .bashrc file, for example:
     
@@ -420,7 +432,7 @@ CLASSES
      |  ----------------------------------------------------------------------
      |  Data and other attributes defined here:
      |  
-     |  defaults = {'BINARY_SSH': '/usr/bin/ssh', 'DEFAULT_IDENTITY': '$USER',...
+     |  defaults = {'BINARY_SSH': None, 'DEFAULT_IDENTITY': '$USER',...
     
     class SshIdentPrint(__builtin__.object)
      |  Wrapper around python's print function.
@@ -508,9 +520,13 @@ FUNCTIONS
         Returns:
           string, the configuration file to use
     
+    AutodetectBinary(argv, config)
+        Detects the correct binary to run and sets BINARY_SSH accordingly, if
+        it is not already set.
+
     ParseCommandLine(argv, config)
         Parses the command line parameters in argv
-        and modified config accordingly.
+        and modifies config accordingly.
     
     ShouldPrint(config, loglevel)
         Returns true if a message by the specified loglevel should be printed.

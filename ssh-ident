@@ -75,19 +75,31 @@ About scp, rsync, and friends
 =============================
 
 scp, rsync, and most similar tools internally invoke ssh. If you don't tell
-them to use ssh-ident instead, key loading won't work. There are two simple
-ways to solve the problem:
+them to use ssh-ident instead, key loading won't work. There are three ways
+to solve the problem:
 
 1) Rename 'ssh-ident' to 'ssh' or create a symlink 'ssh' pointing to
    ssh-ident in a directory in your PATH before /usr/bin or /bin, similarly
    to what was described previously. For example, add to your .bashrc:
 
     export PATH="~/bin:$PATH"
+
+   And run:
+
     ln -s /path/to/ssh-ident ~/bin/ssh
 
    Make sure `echo $PATH` shows '~/bin' *before* '/usr/bin' or '/bin'. You
    can verify this is working as expected with `which ssh`, which should
    show ~/bin/ssh.
+
+   This works for rsync and git, among others, but not for scp and sftp, as
+   these do not look for ssh in your PATH but use a hard-coded path to the
+   binary.
+   If you want to use ssh-ident with scp or sftp,  you can simply create
+   symlinks for them as well:
+
+    ln -s /path/to/ssh-ident ~/bin/scp
+    ln -s /path/to/ssh-ident ~/bin/sftp
 
 2) Add a few more aliases in your .bashrc file, for example:
 
@@ -296,6 +308,7 @@ import re
 import socket
 import subprocess
 import collections
+import distutils.spawn
 
 
 # constants so noone has deal with cryptic numbers
@@ -392,8 +405,9 @@ class Config(object):
       # Additional options to append to ssh by default.
       "SSH_DEFAULT_OPTIONS": "-oUseRoaming=no",
 
-      # Complete path of full ssh binary to use.
-      "BINARY_SSH": "/usr/bin/ssh",
+      # Complete path of full ssh binary to use. If not set, ssh-ident will
+      # try to autodetect the correct binary.
+      "BINARY_SSH": None,
 
       # Which identity to use by default if we cannot tell from
       # the current working directory and/or argv.
@@ -782,9 +796,43 @@ class AgentManager(object):
             additional_flags, self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command)
 
+def AutodetectBinary(argv, config):
+  """Detects the correct binary to run and sets BINARY_SSH accordingly,
+  if it is not already set."""
+  # If BINARY_SSH is set by the user, respect that and do nothing.
+  if config.Get("BINARY_SSH"):
+    return
+  ssh_ident_path = os.path.abspath(os.path.dirname(argv[0]))
+  binary_name = os.path.basename(argv[0])
+  # Remove the path containing the ssh-ident symlink (or whatever) from
+  # the search path, so we do not cause an infinite loop.
+  search_path = [os.path.normpath(p) for p in
+                 os.environ['PATH'].split(os.pathsep)]
+  try:
+    i = search_path.index(ssh_ident_path)
+  except ValueError:
+    pass
+  else:
+    del search_path[i]
+  search_path = os.pathsep.join(search_path)
+  # Find an executable with the desired name.
+  binary_path = distutils.spawn.find_executable(binary_name, search_path)
+  if not binary_path:
+    # Nothing found. Try to find something named 'ssh'.
+    binary_path = distutils.spawn.find_executable('ssh')
+    # Check if it is ssh-ident.
+    if binary_path == os.path.abspath(argv[0]):
+      binary_path = None
+  if binary_path:
+    config.Set("BINARY_SSH", binary_path)
+  else:
+    print("Unable to find ssh binary. Please set BINARY_SSH.",
+          loglevel=LOG_ERROR)
+    sys.exit(255)
+
 def ParseCommandLine(argv, config):
   """Parses the command line parameters in argv
-  and modified config accordingly."""
+  and modifies config accordingly."""
   # This function may need a lot of refactoring if it is ever used for more
   # than checking for BatchMode for OpenSSH...
   binary = os.path.basename(config.Get("BINARY_SSH"))
@@ -817,6 +865,17 @@ def main(argv):
   # overwrite python's print function with the wrapper SshIdentPrint
   global print
   print = SshIdentPrint(config)
+  AutodetectBinary(argv, config)
+  # Check that BINARY_SSH ist not ssh-ident.
+  # This can happen if the user sets a binary name only (e.g. 'scp') and a
+  # symlink with the same name was set up.
+  binary_path = os.path.realpath(
+    distutils.spawn.find_executable(config.Get("BINARY_SSH")))
+  ssh_ident_path = os.path.realpath(argv[0])
+  if binary_path == ssh_ident_path:
+    print("BINARY_SSH '{}' is ssh-ident. Please set a different path."
+          .format(config.Get("BINARY_SSH")), loglevel=LOG_ERROR)
+    sys.exit(255)
   ParseCommandLine(argv, config)
   identity = FindIdentity(argv, config)
   keys = FindKeys(identity, config)
