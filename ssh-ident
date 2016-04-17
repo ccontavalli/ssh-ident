@@ -804,17 +804,18 @@ def AutodetectBinary(argv, config):
     return
   ssh_ident_path = os.path.abspath(os.path.dirname(argv[0]))
   binary_name = os.path.basename(argv[0])
+
   # Remove the path containing the ssh-ident symlink (or whatever) from
   # the search path, so we do not cause an infinite loop.
-  search_path = [os.path.normpath(p) for p in
-                 os.environ['PATH'].split(os.pathsep)]
-  try:
-    i = search_path.index(ssh_ident_path)
-  except ValueError:
-    pass
-  else:
-    del search_path[i]
-  search_path = os.pathsep.join(search_path)
+  # Note that:
+  #  - paths in PATH may be not-normalized, example: "/usr/bin/../foo",
+  #    or "/opt/scripts///". Normalize them before comparison.
+  #  - paths in PATH may be repeated multiple times. We have to exclude
+  #    all instances of the ssh-ident path.
+  expanded_path = map(os.path.normpath, os.environ['PATH'].split(os.pathsep))
+  search_path = os.pathsep.join([
+      p for p in expanded_path if p != ssh_ident_path])
+
   # Find an executable with the desired name.
   binary_path = distutils.spawn.find_executable(binary_name, search_path)
   if not binary_path:
