@@ -776,7 +776,7 @@ class AgentManager(object):
   @staticmethod
   def RunShellCommandInAgent(agentfile, command):
     """Runs a shell command with an agent configured in the environment."""
-    command = ["/usr/bin/env", "-i", "/bin/sh", "-c",
+    command = ["/bin/sh", "-c",
                ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
