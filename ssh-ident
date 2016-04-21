@@ -482,7 +482,7 @@ class Config(object):
       return self.Expand(self.defaults[parameter])
 
     print(
-        "Parameter '{}' needs to be defined in "
+        "Parameter '{0}' needs to be defined in "
         "config file or defaults".format(parameter), file=sys.stderr,
         loglevel=LOG_ERROR)
     sys.exit(2)
@@ -575,7 +575,7 @@ def FindKeys(identity, config):
           found[key.replace(match, "")][kind] = key
 
   if not found:
-    print("Warning: no keys found for identity {} in:".format(identity),
+    print("Warning: no keys found for identity {0} in:".format(identity),
         file=sys.stderr,
         loglevel=LOG_WARN)
     print(directories, file=sys.stderr, loglevel=LOG_WARN)
@@ -649,7 +649,7 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print("Loading keys:\n    {}".format( "\n    ".join(toload)),
+      print("Loading keys:\n    {0}".format( "\n    ".join(toload)),
           file=sys.stderr, loglevel=LOG_INFO)
       self.LoadKeyFiles(toload)
     else:
@@ -689,7 +689,7 @@ class AgentManager(object):
     options = self.config.Get("SSH_ADD_OPTIONS").get(
         self.identity, self.config.Get("SSH_ADD_DEFAULT_OPTIONS"))
     self.RunShellCommandInAgent(
-        self.agent_file, "ssh-add {} {}".format(options, keys))
+        self.agent_file, "ssh-add {0} {1}".format(options, keys))
 
   def GetLoadedKeys(self):
     """Returns an iterable of strings, each the fingerprint of a loaded key."""
@@ -710,7 +710,7 @@ class AgentManager(object):
   def GetPublicKeyFingerprint(key):
     """Returns the fingerprint of a public key as a string."""
     retval, stdout = AgentManager.RunShellCommand(
-        "ssh-keygen -l -f {} |tr -s ' '".format(key))
+        "ssh-keygen -l -f {0} |tr -s ' '".format(key))
     if retval:
       return None
 
@@ -738,20 +738,20 @@ class AgentManager(object):
       if e.errno != errno.EEXIST:
         raise OSError(
             "Cannot create agents directory, try manually with "
-            "'mkdir -p {}'".format(path))
+            "'mkdir -p {0}'".format(path))
 
     # Use the hostname as part of the path just in case this is on NFS.
     agentfile = os.path.join(
-        path, "agent-{}-{}".format(identity, socket.gethostname()))
+        path, "agent-{0}-{1}".format(identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
-      print("Agent for identity {} ready".format(identity), file=sys.stderr,
+      print("Agent for identity {0} ready".format(identity), file=sys.stderr,
           loglevel=LOG_DEBUG)
       return agentfile
 
-    print("Preparing new agent for identity {}".format(identity), file=sys.stderr,
+    print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
         loglevel=LOG_DEBUG)
     retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {}".format(agentfile)])
+        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
     return agentfile
 
   @staticmethod
@@ -760,7 +760,7 @@ class AgentManager(object):
     retval, output = AgentManager.RunShellCommandInAgent(
         agentfile, "ssh-add -l >/dev/null 2>/dev/null")
     if retval & 0xff not in [0, 1]:
-      print("Agent in {} not running".format(agentfile), file=sys.stderr,
+      print("Agent in {0} not running".format(agentfile), file=sys.stderr,
           loglevel=LOG_DEBUG)
       return False
     return True
@@ -777,7 +777,7 @@ class AgentManager(object):
   def RunShellCommandInAgent(agentfile, command):
     """Runs a shell command with an agent configured in the environment."""
     command = ["/usr/bin/env", "-i", "/bin/sh", "-c",
-               ". {} >/dev/null 2>/dev/null; {}".format(agentfile, command)]
+               ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
     return process.wait(), stdout
@@ -787,7 +787,7 @@ class AgentManager(object):
     """Escapes all arguments to the shell, returns a string."""
     escaped = []
     for arg in argv:
-      escaped.append("'{}'".format(arg.replace("'", "'\"'\"'")))
+      escaped.append("'{0}'".format(arg.replace("'", "'\"'\"'")))
     return " ".join(escaped)
 
   def GetShellArgs(self):
@@ -802,11 +802,11 @@ class AgentManager(object):
     additional_flags = self.config.Get("SSH_OPTIONS").get(
         self.identity, self.config.Get("SSH_DEFAULT_OPTIONS"))
     if (self.ssh_config):
-      additional_flags += " -F {}".format(self.ssh_config)
+      additional_flags += " -F {0}".format(self.ssh_config)
 
     command = [
         "/bin/sh", self.GetShellArgs(),
-        ". {} >/dev/null 2>/dev/null; exec {} {} {}".format(
+        ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
             self.agent_file, self.config.Get("BINARY_SSH"),
             additional_flags, self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command)
@@ -816,7 +816,7 @@ def AutodetectBinary(argv, config):
   if it is not already set."""
   # If BINARY_SSH is set by the user, respect that and do nothing.
   if config.Get("BINARY_SSH"):
-    print("Will run '{}' as ssh binary - set by user via BINARY_SSH"
+    print("Will run '{0}' as ssh binary - set by user via BINARY_SSH"
           .format(config.Get("BINARY_SSH")), loglevel=LOG_DEBUG)
     return
 
@@ -829,7 +829,7 @@ def AutodetectBinary(argv, config):
       binary_path = os.path.join(config.Get("BINARY_DIR"), "ssh")
 
     config.Set("BINARY_SSH", binary_path)
-    print("Will run '{}' as ssh binary - deteced based on BINARY_DIR"
+    print("Will run '{0}' as ssh binary - deteced based on BINARY_DIR"
           .format(config.Get("BINARY_SSH")), loglevel=LOG_DEBUG)
     return
 
@@ -856,11 +856,11 @@ def AutodetectBinary(argv, config):
   ssh_ident_path = ""
   if not os.path.dirname(runtime_name):
     message = textwrap.dedent("""\
-    argv[0] ("{}") is a relative path. This means that ssh-ident does
+    argv[0] ("{0}") is a relative path. This means that ssh-ident does
     not know its own directory, and can't exclude it from searching it
     in $PATH:
 
-      PATH="{}"
+      PATH="{1}"
 
     This may result in a loop, with 'ssh-ident' trying to run itself.
     It is recommended that you set BINARY_SSH, BINARY_DIR, or run
@@ -890,14 +890,14 @@ def AutodetectBinary(argv, config):
 
   if binary_path:
     config.Set("BINARY_SSH", binary_path)
-    print("Will run '{}' as ssh binary - deteced from argv[0] and $PATH"
+    print("Will run '{0}' as ssh binary - deteced from argv[0] and $PATH"
           .format(config.Get("BINARY_SSH")), loglevel=LOG_DEBUG)
   else:
     message = textwrap.dedent("""\
-    ssh-ident was invoked in place of the binary {} (determined from argv[0]).
+    ssh-ident was invoked in place of the binary {0} (determined from argv[0]).
     Neither this binary nor 'ssh' could be found in $PATH.
 
-      PATH="{}" 
+      PATH="{1}" 
 
     You need to adjust your setup for ssh-ident to work: consider setting
     BINARY_SSH or BINARY_DIR in your config, or running ssh-ident some
@@ -954,8 +954,8 @@ def main(argv):
     distutils.spawn.find_executable(argv[0]))
   if binary_path == ssh_ident_path:
     message = textwrap.dedent("""\
-    ssh-ident found '{}' as the next command to run.
-    Based on argv[0] ({}), it seems like this will create a
+    ssh-ident found '{0}' as the next command to run.
+    Based on argv[0] ({1}), it seems like this will create a
     loop. 
     
     Please use BINARY_SSH, BINARY_DIR, or change the way
