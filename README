@@ -204,7 +204,7 @@ DESCRIPTION
       # Options to pass to ssh by default.
       # If you don't specify anything, UserRoaming=no is passed, due
       # to CVE-2016-0777. Leave it empty to disable this.
-      "SSH_DEFAULT_OPTIONS": "-oUseRoaming=no",
+      SSH_DEFAULT_OPTIONS = "-oUseRoaming=no"
     
       # Which options to use by default if no match with SSH_ADD_OPTIONS
       # was found. Note that ssh-ident hard codes -t 7200 to prevent your
