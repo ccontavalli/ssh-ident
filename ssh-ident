@@ -933,8 +933,9 @@ def ParseCommandLine(argv, config):
 def main(argv):
   # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
   # that use ssh in case we error out or similar.
-  sys.stdout = open("/dev/tty", "w")
-  sys.stderr = open("/dev/tty", "w")
+  if subprocess.call(["tty"], stdout=open(os.devnull, 'w')) == 0:
+    sys.stdout = open("/dev/tty", "w")
+    sys.stderr = open("/dev/tty", "w")
 
   config = Config().Load()
   # overwrite python's print function with the wrapper SshIdentPrint
