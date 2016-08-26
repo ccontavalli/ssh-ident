@@ -122,14 +122,14 @@ to solve the problem:
     rsync -e '/path/to/ssh-ident' ...
     scp -S '/path/to/ssh-ident' ...
 
-4) Replace the real ssh on the system with ssh-ident, and set the 
+4) Replace the real ssh on the system with ssh-ident, and set the
    BINARY_SSH configuration parameter to the original value.
 
    On Debian based system, you can make this change in a way that
    will survive automated upgrades and audits by running:
 
      dpkg-divert --divert /usr/bin/ssh.ssh-ident --rename /usr/bin/ssh
-   
+
    After which, you will need to use:
 
      BINARY_SSH="/usr/bin/ssh.ssh-ident"
@@ -639,7 +639,7 @@ class AgentManager(object):
     self.config = config
     self.ssh_config = sshconfig
     self.agents_path = os.path.abspath(config.Get("DIR_AGENTS"))
-    self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
+    self.agent_file = self.GetAgentFile(self.config, self.agents_path, self.identity)
 
   def LoadUnloadedKeys(self, keys):
     """Loads all the keys specified that are not loaded.
@@ -688,8 +688,13 @@ class AgentManager(object):
     keys = " ".join(keys)
     options = self.config.Get("SSH_ADD_OPTIONS").get(
         self.identity, self.config.Get("SSH_ADD_DEFAULT_OPTIONS"))
+    # Redirect input from /dev/null to spawn a X11 window for SSH_ASKPASS.
+    # See SSH_ASKPASS section in the ssh manpage for more information.
+    pipe = ""
+    if "SSH_ASKPASS" in os.environ:
+        pipe = "< /dev/null"
     self.RunShellCommandInAgent(
-        self.agent_file, "ssh-add {0} {1}".format(options, keys))
+        self.agent_file, "ssh-add {0} {1} {2}".format(options, keys, pipe))
 
   def GetLoadedKeys(self):
     """Returns an iterable of strings, each the fingerprint of a loaded key."""
@@ -721,10 +726,12 @@ class AgentManager(object):
     return fingerprint
 
   @staticmethod
-  def GetAgentFile(path, identity):
+  def GetAgentFile(config, path, identity):
     """Returns the path to an agent config file.
 
     Args:
+      config: object implementing the Config interface, providing configurations
+          for the user.
       path: string, the path where agent config files are kept.
       identity: string, identity for which to load the agent.
 
@@ -741,18 +748,46 @@ class AgentManager(object):
             "'mkdir -p {0}'".format(path))
 
     # Use the hostname as part of the path just in case this is on NFS.
-    agentfile = os.path.join(
+    agent_file = os.path.join(
         path, "agent-{0}-{1}".format(identity, socket.gethostname()))
-    if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
+
+    if os.access(agent_file, os.R_OK) and \
+        AgentManager.IsAgentFileValid(agent_file):
       print("Agent for identity {0} ready".format(identity), file=sys.stderr,
           loglevel=LOG_DEBUG)
-      return agentfile
+      return agent_file
 
+    # Prepare new ssh-agent instance and file.
     print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
         loglevel=LOG_DEBUG)
-    retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
-    return agentfile
+
+    # Pass only a subset of environment variables to ssh-agent.
+    env_filter = {'PATH', 'DISPLAY', 'XAUTHORITY', 'SSH_ASKPASS'}
+    agent_env = { k: v for k, v in os.environ.items() if k in env_filter }
+
+    # Redirect shell instructions from stdout to agent-file and debug output to
+    # STDOUT if in DEBUG mode.
+    shell_args = "-c"
+    agent_flags = ""
+    agent_fork = ""
+    log_pipe = None
+    if ShouldPrint(config, LOG_DEBUG):
+      shell_args = "-xc"
+      agent_flags = "-d"
+      agent_fork = "&"
+      log_pipe = sys.stderr
+
+    shell_command = "ssh-agent {0} 1>&{1} {2}".format(
+      agent_flags, agent_file, agent_fork)
+    command = ["/bin/sh", shell_args, shell_command]
+
+    # Start ssh-agent with restricted environment variables.
+    p = subprocess.Popen(command, env=agent_env, stderr=log_pipe)
+
+    # Wait until agent has forked.
+    p.wait()
+
+    return agent_file
 
   @staticmethod
   def IsAgentFileValid(agentfile):
@@ -766,21 +801,20 @@ class AgentManager(object):
     return True
 
   @staticmethod
-  def RunShellCommand(command):
+  def RunShellCommand(command, shell_args = None):
     """Runs a shell command, returns (status, stdout), (int, string)."""
-    command = ["/bin/sh", "-c", command]
+    if not shell_args:
+      shell_args = "-c"
+    command = ["/bin/sh", shell_args, command]
     process = subprocess.Popen(command, stdout=subprocess.PIPE)
     stdout, stderr = process.communicate()
     return process.wait(), stdout
 
   @staticmethod
-  def RunShellCommandInAgent(agentfile, command):
+  def RunShellCommandInAgent(agentfile, command, shell_args = None):
     """Runs a shell command with an agent configured in the environment."""
-    command = ["/bin/sh", "-c",
-               ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE)
-    stdout, stderr = process.communicate()
-    return process.wait(), stdout
+    shell_command = ". {0} >/dev/null 2>/dev/null; {1}".format(agentfile, command)
+    return AgentManager.RunShellCommand(shell_command, shell_args)
 
   @staticmethod
   def EscapeShellArguments(argv):
@@ -845,7 +879,7 @@ def AutodetectBinary(argv, config):
   # The logic here is pretty straightforward:
   # - Try to eliminate the path of ssh-ident from PATH.
   # - Search for a binary with the same name of ssh-ident to run.
-  # 
+  #
   # If this fails, we may end up in some sort of loop, where ssh-ident
   # tries to run itself. This should normally be detected later on,
   # where the code checks for the next binary to run.
@@ -897,7 +931,7 @@ def AutodetectBinary(argv, config):
     ssh-ident was invoked in place of the binary {0} (determined from argv[0]).
     Neither this binary nor 'ssh' could be found in $PATH.
 
-      PATH="{1}" 
+      PATH="{1}"
 
     You need to adjust your setup for ssh-ident to work: consider setting
     BINARY_SSH or BINARY_DIR in your config, or running ssh-ident some
@@ -956,8 +990,8 @@ def main(argv):
     message = textwrap.dedent("""\
     ssh-ident found '{0}' as the next command to run.
     Based on argv[0] ({1}), it seems like this will create a
-    loop. 
-    
+    loop.
+
     Please use BINARY_SSH, BINARY_DIR, or change the way
     ssh-ident is invoked (eg, a different argv[0]) to make
     it work correctly.""")
