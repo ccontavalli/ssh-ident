@@ -188,18 +188,18 @@ DESCRIPTION
         "secret": "-t 600",
       }
     
-      # This is option - dont' include any SSH_OPTIONS if you don't
+      # This is optional - dont' include any SSH_OPTIONS if you don't
       # need it.
       # Otherwise, provides options to be passed to 'ssh' for specifc
       # identities.
-      "SSH_OPTIONS": {
+      SSH_OPTIONS = {
         # Disable forwarding of the agent, but enable X forwarding,
         # when using the work profile.
         "work": "-Xa",
     
         # Always forward the agent when using the secret identity.
-        "secret": "-A"
-      },
+        "secret": "-A",
+      }
     
       # Options to pass to ssh by default.
       # If you don't specify anything, UserRoaming=no is passed, due
@@ -264,7 +264,7 @@ DESCRIPTION
     
     The default is:
     
-          "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)"
+          PATTERN_KEYS = r"/(id_.*|identity.*|ssh[0-9]-.*)"
     
     You can also redefine:
     
