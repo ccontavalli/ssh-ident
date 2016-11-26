@@ -874,7 +874,7 @@ def AutodetectBinary(argv, config):
       binary_path = os.path.join(config.Get("BINARY_DIR"), "ssh")
 
     config.Set("BINARY_SSH", binary_path)
-    print("Will run '{0}' as ssh binary - deteced based on BINARY_DIR"
+    print("Will run '{0}' as ssh binary - detected based on BINARY_DIR"
           .format(config.Get("BINARY_SSH")), loglevel=LOG_DEBUG)
     return
 
@@ -935,7 +935,7 @@ def AutodetectBinary(argv, config):
 
   if binary_path:
     config.Set("BINARY_SSH", binary_path)
-    print("Will run '{0}' as ssh binary - deteced from argv[0] and $PATH"
+    print("Will run '{0}' as ssh binary - detected from argv[0] and $PATH"
           .format(config.Get("BINARY_SSH")), loglevel=LOG_DEBUG)
   else:
     message = textwrap.dedent("""\
