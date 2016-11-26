@@ -277,7 +277,7 @@ derivate, you can now build debian packages.
 
   1. Make sure you have devscripts installed:
 
-    sudo apt-get install devscripts
+    sudo apt-get install devscripts debhelper
 
   2. Download ssh-ident in a directory of your choice (ssh-ident)
 
@@ -285,7 +285,7 @@ derivate, you can now build debian packages.
 
   3. Build the .deb package:
 
-    cd ssh-ident && debuild
+    cd ssh-ident && debuild -us -uc
 
   4. Profit:
 
