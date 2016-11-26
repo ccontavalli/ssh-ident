@@ -399,7 +399,7 @@ CLASSES
      |  RunShellCommand(command)
      |      Runs a shell command, returns (status, stdout), (int, string).
      |  
-     |  RunShellCommandInAgent(agentfile, command)
+     |  RunShellCommandInAgent(agentfile, command, stdin=None, stdout=-1)
      |      Runs a shell command with an agent configured in the environment.
      |  
      |  ----------------------------------------------------------------------
@@ -536,6 +536,39 @@ FUNCTIONS
         
         Returns:
           string, the configuration file to use
+    
+    GetSessionTty()
+        Returns a file descriptor for the session TTY, or None.
+        
+        In *nix systems, each process is tied to one session. Each
+        session can be tied (or not) to a terminal, "/dev/tty".
+        
+        Additionally, when a command is run, its stdin or stdout can
+        be any file descriptor, including one that represent a tty.
+        
+        So for example:
+        
+          ./test.sh < /dev/null > /dev/null
+        
+        will have stdin and stdout tied to /dev/null - but does not
+        tell us anything about the session having a /dev/tty associated
+        or not.
+        
+        For example, running 
+        
+          ssh -t user@remotehost './test.sh < /dev/null > /dev/null'
+        
+        have a tty associated, while the same command without -t will not.
+        
+        When ssh is invoked by tools like git or rsyn, its stdin and stdout
+        is often tied to a file descriptor which is not a terminal, has
+        the tool wants to provide the input and process the output.
+        
+        ssh-ident internally has to invoke ssh-add, which needs to know if
+        it has any terminal it can use at all.
+        
+        This function returns an open file if the session has an usable terminal,
+        None otherwise.
     
     ParseCommandLine(argv, config)
         Parses the command line parameters in argv
