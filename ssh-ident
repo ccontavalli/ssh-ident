@@ -795,8 +795,14 @@ class AgentManager(object):
 
     print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
         loglevel=LOG_DEBUG)
+
+    envs = []
+    if 'DISPLAY' in os.environ:
+        envs.append("DISPLAY={0}".format(os.environ['DISPLAY']))
+    if 'SSH_ASKPASS' in os.environ:
+        envs.append("SSH_ASKPASS={0}".format(os.environ['SSH_ASKPASS']))
     retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
+        ["/usr/bin/env", "-i"] + envs + ["/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
     return agentfile
 
   @staticmethod
