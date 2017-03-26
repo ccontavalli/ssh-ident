@@ -1,3 +1,4 @@
 *~
 .*.sw?
 ssh-identc
+*.pyc
