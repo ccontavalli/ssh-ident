@@ -2,3 +2,7 @@
 .*.sw?
 ssh-identc
 *.pyc
+.tox
+ssh_ident.egg-info/
+build
+dist

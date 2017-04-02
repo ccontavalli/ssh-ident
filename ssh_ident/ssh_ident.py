@@ -122,14 +122,14 @@ to solve the problem:
     rsync -e '/path/to/ssh-ident' ...
     scp -S '/path/to/ssh-ident' ...
 
-4) Replace the real ssh on the system with ssh-ident, and set the 
+4) Replace the real ssh on the system with ssh-ident, and set the
    BINARY_SSH configuration parameter to the original value.
 
    On Debian based system, you can make this change in a way that
    will survive automated upgrades and audits by running:
 
      dpkg-divert --divert /usr/bin/ssh.ssh-ident --rename /usr/bin/ssh
-   
+
    After which, you will need to use:
 
      BINARY_SSH="/usr/bin/ssh.ssh-ident"
@@ -317,14 +317,19 @@ import distutils.spawn
 import errno
 import fcntl
 import getpass
-import glob
 import os
 import re
 import socket
 import subprocess
 import sys
-import termios
 import textwrap
+import termios
+
+from utils import enum
+
+VERSION = "1.0.0"
+
+IDENTITY_TYPE = enum("SSH_IDENT", "MATCH_ARGV", "MATCH_PATH", "DEFAULT")
 
 # constants so noone has deal with cryptic numbers
 LOG_CONSTANTS = {"LOG_ERROR": 1, "LOG_WARN": 2, "LOG_INFO": 3, "LOG_DEBUG": 4}
@@ -396,6 +401,10 @@ class SshIdentPrint(object):
   __call__ = write
 
 
+class BadConfigKey(Exception):
+  pass
+
+
 class Config(object):
   """Holds and loads users configurations."""
 
@@ -433,6 +442,9 @@ class Config(object):
       # at the documentation for more details.
       "MATCH_PATH": [],
       "MATCH_ARGV": [],
+
+      "SSH_IDENT_PROMPT": True,
+      "SSH_IDENT_BASH_FUNCTIONS": True,
 
       # Dictionary with identity as a key, allows to specify
       # per identity options when using ssh-add.
@@ -488,9 +500,12 @@ class Config(object):
         loglevel=LOG_ERROR)
     sys.exit(2)
 
-  def Set(self, parameter, value):
+  def Set(self, key, value):
     """Sets configuration option parameter to value."""
-    self.values[parameter] = value
+    if key not in self.defaults:
+        raise BadConfigKey("Invalid config key '%s" % key)
+    self.values[key] = value
+
 
 def FindIdentityInList(elements, identities):
   """Matches a list of identities to a list of elements.
@@ -507,8 +522,9 @@ def FindIdentityInList(elements, identities):
   for element in elements:
     for regex, identity in identities:
       if re.search(regex, element):
-        return identity
-  return None
+        return identity, regex
+  return None, None
+
 
 def FindIdentity(argv, config):
   """Returns the identity to use based on current directory or argv.
@@ -522,10 +538,21 @@ def FindIdentity(argv, config):
     string, the name of the identity to use.
   """
   paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
-  return (
-      FindIdentityInList(argv, config.Get("MATCH_ARGV")) or
-      FindIdentityInList(paths, config.Get("MATCH_PATH")) or
-      config.Get("DEFAULT_IDENTITY"))
+
+  ident = os.environ.get('SSH_IDENT', None)
+  if ident:
+      return ident, IDENTITY_TYPE.SSH_IDENT, None
+
+  ident, regex = FindIdentityInList(argv, config.Get("MATCH_ARGV"))
+  if ident:
+      return ident, IDENTITY_TYPE.MATCH_ARGV, regex
+
+  ident, regex = FindIdentityInList(paths, config.Get("MATCH_PATH"))
+  if ident:
+      return ident, IDENTITY_TYPE.MATCH_PATH, regex
+
+  return config.Get("DEFAULT_IDENTITY"), IDENTITY_TYPE.DEFAULT, None
+
 
 def FindKeys(identity, config):
   """Finds all the private and public keys associated with an identity.
@@ -577,8 +604,8 @@ def FindKeys(identity, config):
 
   if not found:
     print("Warning: no keys found for identity {0} in:".format(identity),
-        file=sys.stderr,
-        loglevel=LOG_WARN)
+          file=sys.stderr,
+          loglevel=LOG_WARN)
     print(directories, file=sys.stderr, loglevel=LOG_WARN)
 
   return found
@@ -632,7 +659,7 @@ def GetSessionTty():
   tell us anything about the session having a /dev/tty associated
   or not.
 
-  For example, running 
+  For example, running
 
     ssh -t user@remotehost './test.sh < /dev/null > /dev/null'
 
@@ -692,11 +719,11 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print("Loading keys:\n    {0}".format( "\n    ".join(toload)),
-          file=sys.stderr, loglevel=LOG_INFO)
+      print("Loading keys:\n    {0}".format("\n    ".join(toload)),
+            file=sys.stderr, loglevel=LOG_INFO)
       self.LoadKeyFiles(toload)
     else:
-      print("All keys already loaded", file=sys.stderr, loglevel=LOG_INFO)
+      print("All keys already loaded", file=sys.stderr, loglevel=LOG_DEBUG)
 
   def FindUnloadedKeys(self, keys):
     """Determines which keys have not been loaded yet.
@@ -790,12 +817,12 @@ class AgentManager(object):
         path, "agent-{0}-{1}".format(identity, socket.gethostname()))
     if os.access(agentfile, os.R_OK) and AgentManager.IsAgentFileValid(agentfile):
       print("Agent for identity {0} ready".format(identity), file=sys.stderr,
-          loglevel=LOG_DEBUG)
+            loglevel=LOG_DEBUG)
       return agentfile
 
     print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
-        loglevel=LOG_DEBUG)
-    retval = subprocess.call(
+          loglevel=LOG_DEBUG)
+    subprocess.call(
         ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
     return agentfile
 
@@ -806,7 +833,7 @@ class AgentManager(object):
         agentfile, "ssh-add -l >/dev/null 2>/dev/null")
     if retval & 0xff not in [0, 1]:
       print("Agent in {0} not running".format(agentfile), file=sys.stderr,
-          loglevel=LOG_DEBUG)
+            loglevel=LOG_DEBUG)
       return False
     return True
 
@@ -854,7 +881,9 @@ class AgentManager(object):
         ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
             self.agent_file, self.config.Get("BINARY_SSH"),
             additional_flags, self.EscapeShellArguments(argv))]
+    print("SSH command: %s" % command, file=sys.stderr, loglevel=LOG_DEBUG)
     os.execv("/bin/sh", command)
+
 
 def AutodetectBinary(argv, config):
   """Detects the correct binary to run and sets BINARY_SSH accordingly,
@@ -890,7 +919,7 @@ def AutodetectBinary(argv, config):
   # The logic here is pretty straightforward:
   # - Try to eliminate the path of ssh-ident from PATH.
   # - Search for a binary with the same name of ssh-ident to run.
-  # 
+  #
   # If this fails, we may end up in some sort of loop, where ssh-ident
   # tries to run itself. This should normally be detected later on,
   # where the code checks for the next binary to run.
@@ -942,13 +971,14 @@ def AutodetectBinary(argv, config):
     ssh-ident was invoked in place of the binary {0} (determined from argv[0]).
     Neither this binary nor 'ssh' could be found in $PATH.
 
-      PATH="{1}" 
+      PATH="{1}"
 
     You need to adjust your setup for ssh-ident to work: consider setting
     BINARY_SSH or BINARY_DIR in your config, or running ssh-ident some
     other way.""")
     print(message.format(argv[0], os.environ['PATH']), loglevel=LOG_ERROR)
     sys.exit(255)
+
 
 def ParseCommandLine(argv, config):
   """Parses the command line parameters in argv
@@ -960,7 +990,7 @@ def ParseCommandLine(argv, config):
     # OpenSSH accepts -o Options as well as -oOption,
     # so let's convert argv to the latter form first
     i = iter(argv)
-    argv = [p+next(i, '') if p == '-o' else p for p in i]
+    argv = [p + next(i, '') if p == '-o' else p for p in i]
     # OpenSSH accepts 'Option=yes' and 'Option yes', 'true' instead of 'yes'
     # and treats everything case-insensitive
     # if an option is given multiple times,
@@ -975,15 +1005,17 @@ def ParseCommandLine(argv, config):
         config.Set("SSH_BATCH_MODE", False)
         break
 
-def main(argv):
+
+def main():
   global print
+  argv = sys.argv
   # Replace stdout and stderr with /dev/tty, so we don't mess up with scripts
   # that use ssh in case we error out or similar.
   try:
     sys.stdout = open("/dev/tty", "w")
     sys.stderr = open("/dev/tty", "w")
-  except IOError:
-    pass
+  except IOError as err:
+    print("Error replacing stdout/stderr with /dev/tty: %s" % err, file=sys.stderr)
 
   config = Config().Load()
   # overwrite python's print function with the wrapper SshIdentPrint
@@ -996,23 +1028,21 @@ def main(argv):
   # Note that this relies on argv[0] being set sensibly by the caller,
   # which is not always the case. argv[0] may also just have the binary
   # name if found in a path.
-  binary_path = os.path.realpath(
-    distutils.spawn.find_executable(config.Get("BINARY_SSH")))
-  ssh_ident_path = os.path.realpath(
-    distutils.spawn.find_executable(argv[0]))
+  binary_path = os.path.realpath(distutils.spawn.find_executable(config.Get("BINARY_SSH")))
+  ssh_ident_path = os.path.realpath(distutils.spawn.find_executable(argv[0]))
   if binary_path == ssh_ident_path:
-    message = textwrap.dedent("""\
+    message = textwrap.dedent("""
     ssh-ident found '{0}' as the next command to run.
     Based on argv[0] ({1}), it seems like this will create a
-    loop. 
-    
+    loop.
+
     Please use BINARY_SSH, BINARY_DIR, or change the way
     ssh-ident is invoked (eg, a different argv[0]) to make
     it work correctly.""")
     print(message.format(config.Get("BINARY_SSH"), argv[0]), loglevel=LOG_ERROR)
     sys.exit(255)
   ParseCommandLine(argv, config)
-  identity = FindIdentity(argv, config)
+  identity, id_type, match = FindIdentity(argv, config)
   keys = FindKeys(identity, config)
   sshconfig = FindSSHConfig(identity, config)
   agent = AgentManager(identity, sshconfig, config)
@@ -1022,8 +1052,9 @@ def main(argv):
     agent.LoadUnloadedKeys(keys)
   return agent.RunSSH(argv[1:])
 
+
 if __name__ == "__main__":
   try:
-    sys.exit(main(sys.argv))
+    sys.exit(main())
   except KeyboardInterrupt:
     print("Goodbye", file=sys.stderr, loglevel=LOG_DEBUG)
