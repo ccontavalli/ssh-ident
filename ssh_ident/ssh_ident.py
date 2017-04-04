@@ -464,6 +464,16 @@ class Config(object):
       "VERBOSITY": LOG_INFO,
   }
 
+  overridable_by_env = ["FILE_USER_CONFIG",
+                        "DIR_IDENTITIES",
+                        "DIR_AGENTS",
+                        "PATTERN_KEYS",
+                        "PATTERN_CONFIG",
+                        "SSH_DEFAULT_OPTIONS",
+                        "BINARY_SSH", "BINARY_DIR",
+                        "DEFAULT_IDENTITY",
+                        "SSH_ADD_DEFAULT_OPTIONS"]
+
   def __init__(self):
     self.values = {}
 
@@ -487,7 +497,7 @@ class Config(object):
 
   def Get(self, parameter):
     """Returns the value of a parameter, or causes the script to exit."""
-    if parameter in os.environ:
+    if parameter in Config.overridable_by_env and parameter in os.environ:
       return self.Expand(os.environ[parameter])
     if parameter in self.values:
       return self.Expand(self.values[parameter])
@@ -704,6 +714,8 @@ class AgentManager(object):
     Parameters:
       DIR_AGENTS: used to compute agents_path.
       BINARY_SSH: path to the ssh binary.
+      EXTRA_SSH_OPTIONS: add extra ssh options from the shell
+
     """
     self.identity = identity
     self.config = config
@@ -873,7 +885,12 @@ class AgentManager(object):
     """Execs ssh with the specified arguments."""
     additional_flags = self.config.Get("SSH_OPTIONS").get(
         self.identity, self.config.Get("SSH_DEFAULT_OPTIONS"))
-    if (self.ssh_config):
+
+    # Allow adding custom ssh options by setting EXTRA_SSH_OPTIONS environment variable
+    if "EXTRA_SSH_OPTIONS" in os.environ:
+      additional_flags += (" %s " % os.environ["EXTRA_SSH_OPTIONS"])
+
+    if self.ssh_config:
       additional_flags += " -F {0}".format(self.ssh_config)
 
     command = [
@@ -881,7 +898,6 @@ class AgentManager(object):
         ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
             self.agent_file, self.config.Get("BINARY_SSH"),
             additional_flags, self.EscapeShellArguments(argv))]
-    print("SSH command: %s" % command, file=sys.stderr, loglevel=LOG_DEBUG)
     os.execv("/bin/sh", command)
 
 
