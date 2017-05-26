@@ -190,7 +190,7 @@ DESCRIPTION
     
       # This is optional - dont' include any SSH_OPTIONS if you don't
       # need it.
-      # Otherwise, provides options to be passed to 'ssh' for specifc
+      # Otherwise, provides options to be passed to 'ssh' for specific
       # identities.
       SSH_OPTIONS = {
         # Disable forwarding of the agent, but enable X forwarding,
