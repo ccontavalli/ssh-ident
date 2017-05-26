@@ -190,7 +190,7 @@ DESCRIPTION
     
       # This is optional - dont' include any SSH_OPTIONS if you don't
       # need it.
-      # Otherwise, provides options to be passed to 'ssh' for specifc
+      # Otherwise, provides options to be passed to 'ssh' for specific
       # identities.
       SSH_OPTIONS = {
         # Disable forwarding of the agent, but enable X forwarding,
@@ -470,7 +470,7 @@ CLASSES
      |      Passes all parameters to python's print,
      |      unless output is disabled by the configuration.
      |      The interface is compatible with python's print, but supports the
-     |      optional paramter 'loglevel' in addition.
+     |      optional parameter 'loglevel' in addition.
      |  
      |  ----------------------------------------------------------------------
      |  Data descriptors defined here:

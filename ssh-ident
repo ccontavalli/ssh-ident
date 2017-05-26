@@ -185,7 +185,7 @@ To have multiple identities, all I have to do is:
 
   # This is optional - dont' include any SSH_OPTIONS if you don't
   # need it.
-  # Otherwise, provides options to be passed to 'ssh' for specifc
+  # Otherwise, provides options to be passed to 'ssh' for specific
   # identities.
   SSH_OPTIONS = {
     # Disable forwarding of the agent, but enable X forwarding,
@@ -376,7 +376,7 @@ class SshIdentPrint(object):
     """Passes all parameters to python's print,
     unless output is disabled by the configuration.
     The interface is compatible with python's print, but supports the
-    optional paramter 'loglevel' in addition."""
+    optional parameter 'loglevel' in addition."""
     if self.config.Get("SSH_BATCH_MODE"):
       # no output in BatchMode
       return
