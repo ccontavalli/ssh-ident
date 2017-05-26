@@ -470,7 +470,7 @@ CLASSES
      |      Passes all parameters to python's print,
      |      unless output is disabled by the configuration.
      |      The interface is compatible with python's print, but supports the
-     |      optional paramter 'loglevel' in addition.
+     |      optional parameter 'loglevel' in addition.
      |  
      |  ----------------------------------------------------------------------
      |  Data descriptors defined here:

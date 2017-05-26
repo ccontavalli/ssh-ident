@@ -376,7 +376,7 @@ class SshIdentPrint(object):
     """Passes all parameters to python's print,
     unless output is disabled by the configuration.
     The interface is compatible with python's print, but supports the
-    optional paramter 'loglevel' in addition."""
+    optional parameter 'loglevel' in addition."""
     if self.config.Get("SSH_BATCH_MODE"):
       # no output in BatchMode
       return
