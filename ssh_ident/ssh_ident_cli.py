@@ -24,6 +24,8 @@ ACTION_FLAGS = enum(SET_SHELL_ENV=1,
 
 def get_identities(config):
   identities_path = config.Get("DIR_IDENTITIES")
+  if not os.path.isdir(identities_path):
+      return []
   return [f for f in os.listdir(identities_path) if isdir(join(identities_path, f))]
 
 
@@ -44,7 +46,9 @@ def main():
   group = parser.add_mutually_exclusive_group()
   group.add_argument("-l", "--list", action="store_true", help="List identities")
   group.add_argument("-i", "--identity", action="store_true", help="Show current identity")
-  group.add_argument("-a", "--activate", action="store_true", help="Activate ssh-ident with default config settings")
+  group.add_argument("-a", "--activate", nargs='?', const=True,
+                     help="Activate ssh-ident with default config settings. "
+                     "If a user is provided, only activate if the current user matches the given user.")
   group.add_argument("-d", "--deactivate", action="store_true", help="Dectivate ssh-ident")
   group.add_argument("-c", "--create", metavar='<identity>', help="Create a new identity")
   group.add_argument("-s", "--shell", metavar='<identity>', nargs='?', const='default-ssh-id',
@@ -107,15 +111,22 @@ def main():
   elif args.remove_prompt:
     exit_val |= ACTION_FLAGS.DISABLE_PROMPT
   elif args.activate:
-    idents = get_identities(config)
-    identity, id_type, match = FindIdentity(sys.argv, config)
-    if identity in idents:
-      exit_val |= ACTION_FLAGS.SSH_IDENTITY
-      print(identity, file=stdoutput)
-    if config.Get("SSH_IDENT_PROMPT"):
-      exit_val |= ACTION_FLAGS.ENABLE_PROMPT
-    if config.Get("SSH_IDENT_BASH_FUNCTIONS"):
-      exit_val |= ACTION_FLAGS.DEFINE_BASH_FUNCTIONS
+    # If a user is provided, should match current user running the shell.
+    # if ssh-ident is activated in a users .bashrc, sourcing that .bashrc
+    # file from another user will fail if that user doesn't also have
+    # ssh-ident configured. By explicitly providing a user, ssh-ident will
+    # only be activated if the specified user is the one loading the .bashrc file.
+    activate = args.activate == True or args.activate == os.environ.get('USER')
+    if activate:
+      idents = get_identities(config)
+      identity, id_type, match = FindIdentity(sys.argv, config)
+      if identity in idents:
+        exit_val |= ACTION_FLAGS.SSH_IDENTITY
+        print(identity, file=stdoutput)
+      if config.Get("SSH_IDENT_PROMPT"):
+        exit_val |= ACTION_FLAGS.ENABLE_PROMPT
+      if config.Get("SSH_IDENT_BASH_FUNCTIONS"):
+        exit_val |= ACTION_FLAGS.DEFINE_BASH_FUNCTIONS
   elif args.deactivate:
     exit_val |= ACTION_FLAGS.UNSET_SHELL_ENV
     if config.Get("SSH_IDENT_PROMPT"):

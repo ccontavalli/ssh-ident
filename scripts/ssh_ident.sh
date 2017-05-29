@@ -77,7 +77,7 @@ __ssh_ident_update_prompt_id() {
 
 # Activate the ssh-ident shell prompt
 ssh_ident_activate() {
-	ssh_ident -a
+	ssh_ident -a $1
 }
 
 # Activate the ssh-ident shell prompt
