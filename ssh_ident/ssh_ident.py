@@ -470,7 +470,8 @@ class Config(object):
                         "PATTERN_KEYS",
                         "PATTERN_CONFIG",
                         "SSH_DEFAULT_OPTIONS",
-                        "BINARY_SSH", "BINARY_DIR",
+                        #"BINARY_SSH",
+                        #"BINARY_DIR",
                         "DEFAULT_IDENTITY",
                         "SSH_ADD_DEFAULT_OPTIONS"]
 
