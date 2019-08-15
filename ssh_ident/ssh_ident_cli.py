@@ -19,7 +19,9 @@ ACTION_FLAGS = enum(SET_SHELL_ENV=1,
                     DEFINE_BASH_FUNCTIONS=64,
                     UNDEFINE_BASH_FUNCTIONS=128,
                     PRINT_OUTPUT=256,
-                    VERBOSE=512)
+                    VERBOSE=512,
+                    DISABLE_SHELL_AGENT=1024,
+                    ENABLE_SHELL_AGENT=2048)
 
 
 def get_identities(config):
@@ -49,7 +51,11 @@ def main():
   group.add_argument("-a", "--activate", nargs='?', const=True,
                      help="Activate ssh-ident with default config settings. "
                      "If a user is provided, only activate if the current user matches the given user.")
-  group.add_argument("-d", "--deactivate", action="store_true", help="Dectivate ssh-ident")
+  group.add_argument("-d", "--deactivate", action="store_true", help="Dectivate ssh-ident shell")
+  group.add_argument("-da", "--disable-agent", action="store_true",
+                     help="Disable ssh-ident ssh-agent for current shell")
+  group.add_argument("-ea", "--enable-agent", action="store_true",
+                     help="Enable ssh-ident ssh-agent for current shell")
   group.add_argument("-c", "--create", metavar='<identity>', help="Create a new identity")
   group.add_argument("-s", "--shell", metavar='<identity>', nargs='?', const='default-ssh-id',
                      help="Set identity for the shell")
@@ -133,6 +139,10 @@ def main():
       exit_val |= ACTION_FLAGS.DISABLE_PROMPT
     if config.Get("SSH_IDENT_BASH_FUNCTIONS"):
       exit_val |= ACTION_FLAGS.UNDEFINE_BASH_FUNCTIONS
+  elif args.disable_agent:
+    exit_val |= ACTION_FLAGS.DISABLE_SHELL_AGENT
+  elif args.enable_agent:
+    exit_val |= ACTION_FLAGS.ENABLE_SHELL_AGENT
   elif args.config:
     sshconfig = FindSSHConfig(args.config, config)
     if sshconfig:

@@ -11,6 +11,8 @@ __ssh_ident_cli_flag_define_bash_functions=64
 __ssh_ident_cli_flag_undefine_bash_functions=128
 __ssh_ident_cli_flag_print_output=256
 __ssh_ident_cli_flag_verbose=512
+__ssh_ident_cli_flag_disable_shell_agent=1024
+__ssh_ident_cli_flag_enable_shell_agent=2048
 
 
 define_ssh_ident_bash_funcs () {
@@ -90,10 +92,12 @@ ssh_ident() {
 	local cli_output
 	local cli_action
 	local cli_stdout
+	local cli_verbose=0
 	cli_output=`ssh_ident_cli --action-code $@`
 	__ssh_ident_split_output "$cli_output"
 
 	if [[ $(($cli_action & $__ssh_ident_cli_flag_verbose)) -gt 0 ]] ; then
+		cli_verbose=1
 		echo "Shell action flags: $cli_action"
 	fi
 
@@ -102,6 +106,12 @@ ssh_ident() {
 		export SSH_IDENT=$cli_stdout
 	elif [[ $(($cli_action & $__ssh_ident_cli_flag_unset_shell_env)) -gt 0 ]] ; then
 		unset SSH_IDENT
+	fi
+
+	if [[ $(($cli_action & $__ssh_ident_cli_flag_ssh_identity)) -gt 0 ]] ; then
+		if [[ $cli_verbose -eq 1 ]] ; then
+			echo "Setting shell identity: $SSH_IDENT"
+		fi
 	fi
 
 	# Enable/Disable ssh-ident shell prompt
@@ -132,6 +142,16 @@ ssh_ident() {
 		define_ssh_ident_bash_funcs
 	elif [[ $(($cli_action & $__ssh_ident_cli_flag_undefine_bash_functions)) -gt 0 ]] ; then
 		undefine_ssh_ident_bash_funcs
+	fi
+
+	if [[ $(($cli_action & $__ssh_ident_cli_flag_disable_shell_agent)) -gt 0 ]] ; then
+		echo "ssh-agent disabled for shell"
+		export SSH_IDENT_SHELL_AGENT_DISABLED=1
+	fi
+
+	if [[ $(($cli_action & $__ssh_ident_cli_flag_enable_shell_agent)) -gt 0 ]] ; then
+		echo "ssh-agent enabled for shell"
+		unset SSH_IDENT_SHELL_AGENT_DISABLED
 	fi
 
 	if [[ $(($cli_action & $__ssh_ident_cli_flag_print_output)) -gt 0 ]] ; then

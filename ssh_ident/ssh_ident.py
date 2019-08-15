@@ -887,6 +887,9 @@ class AgentManager(object):
     additional_flags = self.config.Get("SSH_OPTIONS").get(
         self.identity, self.config.Get("SSH_DEFAULT_OPTIONS"))
 
+    # When this is set, to not load agent configs for current identity
+    SSH_IDENT_SHELL_AGENT_DISABLED = os.environ.get("SSH_IDENT_SHELL_AGENT_DISABLED", None)
+
     # Allow adding custom ssh options by setting EXTRA_SSH_OPTIONS environment variable
     if "EXTRA_SSH_OPTIONS" in os.environ:
       additional_flags += (" %s " % os.environ["EXTRA_SSH_OPTIONS"])
@@ -894,11 +897,17 @@ class AgentManager(object):
     if self.ssh_config:
       additional_flags += " -F {0}".format(self.ssh_config)
 
+    def get_load_agent_command(agent_file=None):
+      if agent_file:
+        return ". {0} >/dev/null 2>/dev/null;".format(agent_file)
+      return ""
+
     command = [
-        "/bin/sh", self.GetShellArgs(),
-        ". {0} >/dev/null 2>/dev/null; exec {1} {2} {3}".format(
-            self.agent_file, self.config.Get("BINARY_SSH"),
-            additional_flags, self.EscapeShellArguments(argv))]
+      "/bin/sh", self.GetShellArgs(),
+      "{0} exec {1} {2} {3}".format(
+        get_load_agent_command(self.agent_file if SSH_IDENT_SHELL_AGENT_DISABLED is None else None),
+        self.config.Get("BINARY_SSH"),
+        additional_flags, self.EscapeShellArguments(argv))]
     os.execv("/bin/sh", command)
 
 
@@ -1075,3 +1084,7 @@ if __name__ == "__main__":
     sys.exit(main())
   except KeyboardInterrupt:
     print("Goodbye", file=sys.stderr, loglevel=LOG_DEBUG)
+
+# Local Variables:
+# eval: (enable-guess-style)
+# End:
