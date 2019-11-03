@@ -325,9 +325,10 @@ import sys
 import termios
 import textwrap
 
-if sys.version_info[0] == 3:
+if sys.version_info[0] == 3: # is python3?
   import shutil
-  find_executable = shutil.which
+  def find_executable(ex, path=None):
+    return shutil.which(ex, os.F_OK|os.X_OK, path)
 else:
   import distutils.spawn
   find_executable = distutils.spawn.find_executable
@@ -428,7 +429,7 @@ class Config(object):
 
       # Complete path of full ssh binary to use. If not set, ssh-ident will
       # try to find the correct binary in PATH.
-      "BINARY_SSH": None,
+      "BINARY_SSH": "/usr/bin/ssh",
       "BINARY_DIR": None,
 
       # Which identity to use by default if we cannot tell from
