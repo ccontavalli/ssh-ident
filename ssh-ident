@@ -796,7 +796,9 @@ class AgentManager(object):
     print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
         loglevel=LOG_DEBUG)
     retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
+        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)],
+        close_fds=True
+    )
     return agentfile
 
   @staticmethod
