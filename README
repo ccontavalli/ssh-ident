@@ -110,7 +110,7 @@ DESCRIPTION
     2) Add a few more aliases in your .bashrc file, for example:
     
         alias scp='BINARY_SSH=scp /path/to/ssh-ident'
-        alias rsync='BINARY_SSH=rsync /path/to/ssh-ident'
+        alias rsync='SSH_DEFAULT_OPTIONS= BINARY_SSH=rsync /usr/local/bin/ssh-ident'
         ...
     
        The first alias will make the 'scp' command invoke 'ssh-ident' instead,
