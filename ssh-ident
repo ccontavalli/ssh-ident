@@ -409,7 +409,7 @@ class Config(object):
       "DIR_AGENTS": "$HOME/.ssh/agents",
 
       # How to identify key files in the identities directory.
-      "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)",
+      "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*|.*\.so)",
 
       # How to identify ssh config files.
       "PATTERN_CONFIG": r"/config$",
@@ -450,6 +450,11 @@ class Config(object):
       # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
       # use 0 to disable ALL output (not recommended!)
       "VERBOSITY": LOG_INFO,
+
+      # When using a hardware-Token, smartcard with pkcs11, it will be only
+      # loaded, when not loaded (ask for PIN) in ssh-agent.
+      # Set FORCE_RELOAD_HWTOKEN: True, if you wand to login to token every time
+      "FORCE_RELOAD_HWTOKEN": True,
   }
 
   def __init__(self):
@@ -568,6 +573,7 @@ def FindKeys(identity, config):
       kinds = (
           ("private", "priv"),
           ("public", "pub"),
+          (".so", "pkcs11"),
           (".pub", "pub"),
           ("", "priv"),
       )
@@ -692,7 +698,7 @@ class AgentManager(object):
     """
     toload = self.FindUnloadedKeys(keys)
     if toload:
-      print("Loading keys:\n    {0}".format( "\n    ".join(toload)),
+      print("Loading keys:\n    {0}\nLoading pkcs11:\n    {1}".format( "\n    ".join(toload["toload"]),"\n    ".join(toload["pkcs11"])),
           file=sys.stderr, loglevel=LOG_INFO)
       self.LoadKeyFiles(toload)
     else:
@@ -708,19 +714,36 @@ class AgentManager(object):
       iterable of strings, paths to private key files to load.
     """
     loaded = set(self.GetLoadedKeys())
+    ret = collections.defaultdict(dict)
     toload = set()
+    pkcs11 = set()
+    ret["toload"] = toload
+    ret["pkcs11"] = pkcs11
     for key, config in keys.items():
-      if "pub" not in config:
-        continue
-      if "priv" not in config:
-        continue
+      if "pkcs11" not in config:
+        if "pub" not in config:
+          continue
+        if "priv" not in config:
+          continue
+        if key.find("so.pub") > -1 or key.find(".so") > -1:
+          continue
 
-      fingerprint = self.GetPublicKeyFingerprint(config["pub"])
-      if fingerprint in loaded:
-        continue
+        fingerprint = self.GetPublicKeyFingerprint(config["pub"])
+        if fingerprint in loaded:
+          continue
 
-      toload.add(config["priv"])
-    return toload
+        ret["toload"].add(config["priv"])
+      else:
+        if key.find("cert") > -1 or key.find("pub") > -1:
+          continue
+
+        fingerprint = self.GetPublicKeyFingerprintPKCS11(config["pkcs11"])
+        if fingerprint in loaded:
+          continue
+
+        ret["pkcs11"].add(config["pkcs11"])
+
+    return ret
 
   def LoadKeyFiles(self, keys):
     """Load all specified keys.
@@ -728,13 +751,23 @@ class AgentManager(object):
     Args:
       keys: iterable of strings, each string a path to a key to load.
     """
-    keys = " ".join(keys)
     options = self.config.Get("SSH_ADD_OPTIONS").get(
         self.identity, self.config.Get("SSH_ADD_DEFAULT_OPTIONS"))
     console = GetSessionTty()
-    self.RunShellCommandInAgent(
-        self.agent_file, "ssh-add {0} {1}".format(options, keys),
-        stdout=console, stdin=console)
+    if len(keys["toload"]) > 0:
+      privkeys = " ".join(keys["toload"])
+      self.RunShellCommandInAgent(
+          self.agent_file, "ssh-add {0} {1}".format(options, privkeys),
+          stdout=console, stdin=console)
+    for key in keys["pkcs11"]:
+      if FORCE_RELOAD_HWTOKEN:
+        self.RunShellCommandInAgent(
+            self.agent_file, "ssh-add {0} -e {1}".format(options, key),
+            stdout=console, stdin=console)
+      self.RunShellCommandInAgent(
+          self.agent_file, "ssh-add {0} -s {1}".format(options, key),
+          stdout=console, stdin=console)
+
 
   def GetLoadedKeys(self):
     """Returns an iterable of strings, each the fingerprint of a loaded key."""
@@ -756,6 +789,20 @@ class AgentManager(object):
     """Returns the fingerprint of a public key as a string."""
     retval, stdout = AgentManager.RunShellCommand(
         "ssh-keygen -l -f {0} |tr -s ' '".format(key))
+    if retval:
+      return None
+
+    try:
+      _, fingerprint, _ = stdout.decode("utf-8").split(" ", 2)
+    except ValueError:
+      return None
+    return fingerprint
+
+  @staticmethod
+  def GetPublicKeyFingerprintPKCS11(key):
+    """Returns the fingerprint of a public key as a string."""
+    retval, stdout = AgentManager.RunShellCommand(
+        "ssh-keygen -l -D {0}|tr -s ' '".format(key))
     if retval:
       return None
 
@@ -1004,8 +1051,8 @@ def main(argv):
     message = textwrap.dedent("""\
     ssh-ident found '{0}' as the next command to run.
     Based on argv[0] ({1}), it seems like this will create a
-    loop. 
-    
+    loop.
+
     Please use BINARY_SSH, BINARY_DIR, or change the way
     ssh-ident is invoked (eg, a different argv[0]) to make
     it work correctly.""")
