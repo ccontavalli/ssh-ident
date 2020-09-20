@@ -226,13 +226,38 @@ DESCRIPTION
         $ mkdir -p ~/.ssh/identities/work
         $ mkdir -p ~/.ssh/identities/secret
     
-    4) Generate (or copy) keys for those identities:
+    4) Generate (or copy or symlink) keys for those identities:
     
         # Default keys are for my personal account
         $ cp ~/.ssh/id_rsa* ~/.ssh/identities/personal
+        $ ln -s ~/.ssh/id_rsa ~/.ssh/identities/personal/
     
         # Generate keys to be used for work only, rsa
         $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/id_rsa
+
+    5) If you use hardware-token like eToken:
+        
+        # Make a symlink from the shared library for the token to the identity-dir
+        $ ln -s /usr/lib64/p11-kit-proxy.so ~/.ssh/identities/work/
+
+    General informations:
+    *) ssh-certificate:
+        ssh-certificates can also be used with ssh-ident. Place the *-cert.pub file 
+        also in the identity-directory. It will be picked up from ssh-ident an put
+        into the ssh-agent. So you can use the cert also on remote-machine.
+    *) pkcs11 and ssh-certificate:
+        It is not now possible to add a certificate for a pkcs11 key. This version adds
+        the private-key from a smartcard or hardware-token to the agent. A coresponding
+        certificate can not be loaded in ssh-agent. 
+        (Bugreport exists https://bugzilla.mindrot.org/show_bug.cgi?id=2472)
+        To use local hardware-token to authentificate on a server behind a bastion-host or jumpserver
+        just copy your PublicKey to the remote-machine, from where you want to connect to the 3rd 
+        server. Add the Pubkey as IdentityFile to your ssh-connection, and ssh will find the
+        coresponding private-key in the forwarded ssh-agent.
+        Do the same with CertificateFile on remote-machine. 
+    
+
+
     
         ...
     
@@ -264,7 +289,7 @@ DESCRIPTION
     
     The default is:
     
-          PATTERN_KEYS = r"/(id_.*|identity.*|ssh[0-9]-.*)"
+          PATTERN_KEYS = r"/(id_.*|identity.*|ssh[0-9]-.*|.*\.so)"
     
     You can also redefine:
     
