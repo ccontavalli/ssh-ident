@@ -156,14 +156,26 @@ To have multiple identities, all I have to do is:
     (r"opt/private", "secret"),
   ]
 
-  # If any of the ssh arguments have 'cweb' in it, the 'personal' identity
-  # has to be used. For example: "ssh myhost.cweb.com" will have cweb in
-  # argv, and the "personal" identity will be used.
-  # This is optional - don't include any MATCH_ARGV if you don't
-  # need it.
+  # Specifies which identity to use depending on the arguments I'm running
+  # ssh with. At first each element is separately tested against all patterns,
+  # then a string of all elements is tested against all patterns.
+  # This is optional - don't include any MATCH_ARGV if you don't need it.
+  # For example: If any of the ssh arguments have 'cweb' in it, the 'personal'
+  # identity has to be used. "ssh myhost.cweb.com" will have cweb in argv, and
+  # the "personal" identity will be used.
   MATCH_ARGV = [
     (r"cweb", "personal"),
     (r"corp", "work"),
+  ]
+  # Another example: Choose an identity for git depending on the accessed
+  # repository on GitHub (similar for GitLab, Bitbucket, etc.).
+  # Recognize the elements with the host and the repository path to switch
+  # between 'personal' and 'work' identity.
+  MATCH_ARGV = [
+    (r"\s(git@)?github\.com\s.*'company\/.+\.git'", "work"),
+    (r"\s(git@)?github\.com\s.*'ccontavalli\/.+\.git'", "personal"),
+    (r"\s(git@)?gist\.github\.com\s.*'abcdef01234567890fedcba912345678\.git'", "work"),
+    (r"^(git@)?(gist\.)?github\.com$", "personal"),
   ]
 
   # Note that if no match is found, the DEFAULT_IDENTITY is used. This is
@@ -506,7 +518,7 @@ class Config(object):
     """Sets configuration option parameter to value."""
     self.values[parameter] = value
 
-def FindIdentityInList(elements, identities):
+def FindIdentityInList(elements, identities, all_elements):
   """Matches a list of identities to a list of elements.
 
   Args:
@@ -518,9 +530,22 @@ def FindIdentityInList(elements, identities):
     The identity specified in identities for the first regular expression
     matching the first element in elements.
   """
+  # Test against each element separately
   for element in elements:
     for regex, identity in identities:
       if re.search(regex, element):
+        print("Matching: {0}".format(element),
+            file=sys.stderr,
+            loglevel=LOG_DEBUG)
+        return identity
+  # Test against all elements in a single string
+  if all_elements and len(elements) > 1:
+    element = " ".join(elements)
+    for regex, identity in identities:
+      if re.search(regex, element):
+        print("Matching: {0}".format(element),
+            file=sys.stderr,
+            loglevel=LOG_DEBUG)
         return identity
   return None
 
@@ -537,8 +562,8 @@ def FindIdentity(argv, config):
   """
   paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
   return (
-      FindIdentityInList(argv, config.Get("MATCH_ARGV")) or
-      FindIdentityInList(paths, config.Get("MATCH_PATH")) or
+      FindIdentityInList(argv, config.Get("MATCH_ARGV"), True) or
+      FindIdentityInList(paths, config.Get("MATCH_PATH"), False) or
       config.Get("DEFAULT_IDENTITY"))
 
 def FindKeys(identity, config):
