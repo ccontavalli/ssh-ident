@@ -122,14 +122,14 @@ to solve the problem:
     rsync -e '/path/to/ssh-ident' ...
     scp -S '/path/to/ssh-ident' ...
 
-4) Replace the real ssh on the system with ssh-ident, and set the 
+4) Replace the real ssh on the system with ssh-ident, and set the
    BINARY_SSH configuration parameter to the original value.
 
    On Debian based system, you can make this change in a way that
    will survive automated upgrades and audits by running:
 
      dpkg-divert --divert /usr/bin/ssh.ssh-ident --rename /usr/bin/ssh
-   
+
    After which, you will need to use:
 
      BINARY_SSH="/usr/bin/ssh.ssh-ident"
@@ -391,6 +391,20 @@ class SshIdentPrint(object):
       loglevel = LOG_INFO
 
     if ShouldPrint(self.config, loglevel):
+      if "prefix" in kwargs:
+        args = list(args)
+        args.insert(0, kwargs["prefix"])
+        args = tuple(args)
+        # make sure not to pass the prefix parameter to print
+        del kwargs["prefix"]
+      elif loglevel == LOG_DEBUG:
+        args = list(args)
+        args.insert(0, "[debug]")
+        args = tuple(args)
+      elif loglevel == LOG_ERROR:
+        args = list(args)
+        args.insert(0, "[ERROR]")
+        args = tuple(args)
       self.python_print(*args, **kwargs)
 
   __call__ = write
@@ -632,7 +646,7 @@ def GetSessionTty():
   tell us anything about the session having a /dev/tty associated
   or not.
 
-  For example, running 
+  For example, running
 
     ssh -t user@remotehost './test.sh < /dev/null > /dev/null'
 
@@ -890,7 +904,7 @@ def AutodetectBinary(argv, config):
   # The logic here is pretty straightforward:
   # - Try to eliminate the path of ssh-ident from PATH.
   # - Search for a binary with the same name of ssh-ident to run.
-  # 
+  #
   # If this fails, we may end up in some sort of loop, where ssh-ident
   # tries to run itself. This should normally be detected later on,
   # where the code checks for the next binary to run.
@@ -942,7 +956,7 @@ def AutodetectBinary(argv, config):
     ssh-ident was invoked in place of the binary {0} (determined from argv[0]).
     Neither this binary nor 'ssh' could be found in $PATH.
 
-      PATH="{1}" 
+      PATH="{1}"
 
     You need to adjust your setup for ssh-ident to work: consider setting
     BINARY_SSH or BINARY_DIR in your config, or running ssh-ident some
@@ -1004,8 +1018,8 @@ def main(argv):
     message = textwrap.dedent("""\
     ssh-ident found '{0}' as the next command to run.
     Based on argv[0] ({1}), it seems like this will create a
-    loop. 
-    
+    loop.
+
     Please use BINARY_SSH, BINARY_DIR, or change the way
     ssh-ident is invoked (eg, a different argv[0]) to make
     it work correctly.""")
