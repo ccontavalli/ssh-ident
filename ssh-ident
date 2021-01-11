@@ -22,9 +22,9 @@ In any case, ssh-ident:
   actually need them, once. No matter how many terminals, ssh or login
   sessions you have, no matter if your home is shared via NFS.
 
-- can prepare and use a different agent and different set of keys depending
-  on the host you are connecting to, or the directory you are using ssh
-  from.
+- can prepare and use a different agent, different set of keys and different
+  ssh config file depending on the host you are connecting to, or the
+  directory you are using ssh from.
   This allows for isolating keys when using agent forwarding with different
   sites (eg, university, work, home, secret evil internet identity, ...).
   It also allows to use multiple accounts on sites like github, unfuddle
@@ -199,6 +199,7 @@ To have multiple identities, all I have to do is:
   # need it.
   # Otherwise, provides options to be passed to 'ssh' for specific
   # identities.
+  # Note that separate ssh config files per identity are possible too.
   SSH_OPTIONS = {
     # Disable forwarding of the agent, but enable X forwarding,
     # when using the work profile.
@@ -241,6 +242,11 @@ To have multiple identities, all I have to do is:
     # Generate keys to be used for work only, rsa
     $ ssh-keygen -t rsa -b 4096 -f ~/.ssh/identities/work/id_rsa
 
+5) Optionally create separate ssh config files for those identities that
+   need special ssh settings in general or for specific hosts:
+
+    $ ${EDITOR} ~/.ssh/identities/secret/config
+
     ...
 
 
@@ -260,18 +266,79 @@ ssh-ident will be invoked instead, and:
      access only to the agent for the identity work, and the corresponding
      keys.
 
-Note that ssh-ident needs to access both your private and public keys. Note
-also that it identifies public keys by the .pub extension. All files in your
-identities subdirectories will be considered keys.
+Notes about key files:
+ssh-ident needs to access both your private and public keys. Both files of each
+key pair have to reside in the same directory.
+All files in your identities subdirectories that match PATTERN_KEYS will be
+considered key files (either private or public). If a different naming scheme
+is used, then make sure that PATTERN_KEYS matches filenames for both types.
+By default ssh-ident identifies public keys by the .pub extension or
+a "public" inside the filename, while private keys have no explicit extension
+or a "private" inside the filename. To recognize a key pair these specific name
+parts are removed, the remaining filenames compared and connected if they match.
+A key is only recognized and loaded if the key pair is complete.
+The public key file is necessary to detect if a key is already loaded into
+ssh-agent to avoid adding it again and therefore asking for password again.
+If a public key file is missing check out the '-y' parameter of 'ssh-keygen'.
+All patterns to detect key files in general plus public and private keys are
+defined in lists, which can hold multiple regular expressions or simple
+compare strings. The first match is taken and no further tests done.
+Patterns are tested against the filename, not the full path.
 
-If you want to only load keys that have "key" in the name, you can add
-to your .ssh-ident:
+The defaults of PATTERN_KEYS against the filename for the general key file
+determination are:
 
-      PATTERN_KEYS = "key"
+      PATTERN_KEYS = [
+        r"^id_",
+        r"^identity",
+        r"^ssh[0-9]-",
+      ]
 
-The default is:
+The defaults of PATTERN_PUBKEYS and PATTERN_PRIVKEYS for the public and private
+key determination are:
 
-      PATTERN_KEYS = r"/(id_.*|identity.*|ssh[0-9]-.*)"
+      PATTERN_PUBKEYS = [
+          [r"\.pub$", 0],
+          [r"public", 0],
+      ]
+      PATTERN_PRIVKEYS = [
+          [r"private", 0],
+          # Fallback for all remaining files.
+          [r"", None],
+      ]
+
+Notes about PATTERN_PUBKEYS and PATTERN_PRIVKEYS:
+ssh-ident first checks if the file is a public key, then if it is a private key.
+The second parameter after the patterns defines which group to remove to
+recognize key pairs. A zero (0) means remove the whole match. 'None' means do
+not remove anything and leave filename as is.
+
+If you want to only load keys that have "mykey" in their filename, you can
+define in your .ssh-ident:
+
+      PATTERN_KEYS = [
+        "mykey",
+      ]
+
+If you want to also load keys that have the extension ".key" or ".pub", then
+you can define in your .ssh-ident:
+
+      PATTERN_KEYS = [
+        r"^id_",
+        r"^identity",
+        r"^ssh[0-9]-",
+        r"(\.key|\.pub)$",
+      ]
+      PATTERN_PRIVKEYS = [
+          [r"\.key$", 0],
+          [r"private", 0],
+          # Fallback for all remaining files.
+          [r"", None],
+      ]
+
+Note: As the ".pub" and ".key" patterns come first, those filenames can also
+have "public" or "private" in their name, e.g. their user name.
+
 
 You can also redefine:
 
@@ -435,7 +502,21 @@ class Config(object):
       "DIR_AGENTS": "$HOME/.ssh/agents",
 
       # How to identify key files in the identities directory.
-      "PATTERN_KEYS": r"/(id_.*|identity.*|ssh[0-9]-.*)",
+      "PATTERN_KEYS": [
+        r"^id_",
+        r"^identity",
+        r"^ssh[0-9]-",
+      ],
+      # How to recognize public and private key files in the identities directory.
+      "PATTERN_PUBKEYS": [
+          [r"\.pub$", 0],
+          [r"public", 0],
+      ],
+      "PATTERN_PRIVKEYS": [
+          [r"private", 0],
+          # Fallback for all remaining files.
+          [r"", None],
+      ],
 
       # How to identify ssh config files.
       "PATTERN_CONFIG": r"/config$",
@@ -502,23 +583,49 @@ class Config(object):
   def Get(self, parameter):
     """Returns the value of a parameter, or causes the script to exit."""
     if parameter in os.environ:
-      return self.Expand(os.environ[parameter])
-    if parameter in self.values:
-      return self.Expand(self.values[parameter])
-    if parameter in self.defaults:
-      return self.Expand(self.defaults[parameter])
+      result = self.Expand(os.environ[parameter])
+    elif parameter in self.values:
+      result = self.Expand(self.values[parameter])
+    elif parameter in self.defaults:
+      result = self.Expand(self.defaults[parameter])
+    else:
+      print(
+          "Parameter '{0}' needs to be defined in "
+          "config file or defaults".format(parameter), file=sys.stderr,
+          loglevel=LOG_ERROR)
+      sys.exit(2)
 
-    print(
-        "Parameter '{0}' needs to be defined in "
-        "config file or defaults".format(parameter), file=sys.stderr,
-        loglevel=LOG_ERROR)
-    sys.exit(2)
+    # Compile patterns for speed
+    if parameter in ("PATTERN_KEYS", "PATTERN_PUBKEYS", "PATTERN_PRIVKEYS", "MATCH_PATH", "MATCH_ARGV"):
+      # Convert old format string, or wrongly used tuple, to list
+      if not isinstance(result, list):
+        # Convert tuple to list, as we need it mutable
+        if isinstance(result, tuple):
+          result = list(result)
+        else:
+          result = [result]
+      # Compile regex pattern [in first element] of each list entry
+      for index, entry in enumerate(result):
+        # Convert tuple to list, as we need it mutable
+        if isinstance(entry, tuple):
+          entry = result[index] = list(entry)
+        # Compile regex
+        if isinstance(entry, list):
+          entry[0] = re.compile(entry[0])
+        else:
+          entry = result[index] = re.compile(entry)
+        #
+        print("{0} #{1}: {2}".format(parameter, index+1, entry),
+            file=sys.stderr,
+            loglevel=LOG_DEBUG)
+
+    return result
 
   def Set(self, parameter, value):
     """Sets configuration option parameter to value."""
     self.values[parameter] = value
 
-def FindIdentityInList(elements, identities, all_elements):
+def FindIdentityInList(elements, identities, all_elements, pattern_name):
   """Matches a list of identities to a list of elements.
 
   Args:
@@ -532,18 +639,22 @@ def FindIdentityInList(elements, identities, all_elements):
   """
   # Test against each element separately
   for element in elements:
+    index = 0
     for regex, identity in identities:
+      index += 1
       if re.search(regex, element):
-        print("Matching: {0}".format(element),
+        print("Matching {0} #{1}: {2}".format(pattern_name, index, element),
             file=sys.stderr,
             loglevel=LOG_DEBUG)
         return identity
   # Test against all elements in a single string
   if all_elements and len(elements) > 1:
     element = " ".join(elements)
+    index = 0
     for regex, identity in identities:
+      index += 1
       if re.search(regex, element):
-        print("Matching: {0}".format(element),
+        print("Matching {0} #{1}: {2}".format(pattern_name, index, element),
             file=sys.stderr,
             loglevel=LOG_DEBUG)
         return identity
@@ -562,8 +673,8 @@ def FindIdentity(argv, config):
   """
   paths = set([os.getcwd(), os.path.abspath(os.getcwd()), os.path.normpath(os.getcwd())])
   return (
-      FindIdentityInList(argv, config.Get("MATCH_ARGV"), True) or
-      FindIdentityInList(paths, config.Get("MATCH_PATH"), False) or
+      FindIdentityInList(argv, config.Get("MATCH_ARGV"), True, "MATCH_ARGV") or
+      FindIdentityInList(paths, config.Get("MATCH_PATH"), False, "MATCH_PATH") or
       config.Get("DEFAULT_IDENTITY"))
 
 def FindKeys(identity, config):
@@ -587,7 +698,9 @@ def FindKeys(identity, config):
   if identity == getpass.getuser():
     directories.append(os.path.expanduser("~/.ssh"))
 
-  pattern = re.compile(config.Get("PATTERN_KEYS"))
+  pattern_keys = config.Get("PATTERN_KEYS")
+  pattern_pub = config.Get("PATTERN_PUBKEYS")
+  pattern_priv = config.Get("PATTERN_PRIVKEYS")
   found = collections.defaultdict(dict)
   for directory in directories:
     try:
@@ -597,28 +710,52 @@ def FindKeys(identity, config):
         continue
       raise
 
-    for key in keyfiles:
+    for keyname in keyfiles:
+      keypath = os.path.join(directory, keyname)
+      if not os.path.isfile(keypath):
+        continue
+      #
+      match = None
+      for pattern in pattern_keys:
+        match = pattern.search(keyname)
+        if match:
+          break
+      if match is None:
+        continue
+      #
+      match = None
+      if match is None:
+        for pattern in pattern_pub:
+          match = pattern[0].search(keyname)
+          if match:
+            kind = 'pub'
+            break
+      if match is None:
+        for pattern in pattern_priv:
+          match = pattern[0].search(keyname)
+          if match:
+            kind = 'priv'
+            break
+      if match is None:
+        continue
+      #
+      if match and not pattern[1] is None:
+        key = keyname[:match.start(pattern[1])] + keyname[match.end(pattern[1]):]
+      else:
+        key = keyname
       key = os.path.join(directory, key)
-      if not os.path.isfile(key):
-        continue
-      if not pattern.search(key):
-        continue
-
-      kinds = (
-          ("private", "priv"),
-          ("public", "pub"),
-          (".pub", "pub"),
-          ("", "priv"),
-      )
-      for match, kind in kinds:
-        if match in key:
-          found[key.replace(match, "")][kind] = key
+      found[key][kind] = keypath
 
   if not found:
     print("Warning: no keys found for identity {0} in:".format(identity),
         file=sys.stderr,
         loglevel=LOG_WARN)
     print(directories, file=sys.stderr, loglevel=LOG_WARN)
+  else:
+    index = 0
+    for keyname in found:
+      index += 1
+      print("Found key pair #{0} {1}: {2}{3}".format(index, keyname, found[keyname], " MISSING PUB" if not 'pub' in found[keyname] else " MISSING PRIV" if not 'priv' in found[keyname] else ""), file=sys.stderr, loglevel=LOG_DEBUG)
 
   return found
 
