@@ -1,16 +1,12 @@
 # Help on module ssh-ident:
 
 
-NAME
-=== 
+### NAME
 ssh-ident - Start and use ssh-agent and load identities as necessary.
-
-FILE
-===
+### FILE
 /opt/projects/ssh-ident.git/ssh-ident
+### DESCRIPTION
 
-DESCRIPTION
-===
 Use this script to start ssh-agents and load ssh keys on demand,
 when they are first needed.
 
