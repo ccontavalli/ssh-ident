@@ -210,7 +210,20 @@ DESCRIPTION
       # was found. Note that ssh-ident hard codes -t 7200 to prevent your
       # keys from remaining in memory for too long.
       SSH_ADD_DEFAULT_OPTIONS = "-t 7200"
-    
+      
+      # This is optional - don't include any SSH_AGENT if you don't
+      # need it.
+      # Otherwise, provides option to change the 'ssh-agent' command for
+      # specific identities.
+      SSH_AGENT = {
+        "work": "ssh-pageant",
+      }
+      
+      # This is optional - don't include any SSH_AGENT if you don't
+      # need it.
+      # Otherwise, provides option to change the 'ssh-agent' command.
+      SSH_DEFAULT_AGENT = "ssh-agent"
+      
       # Output verbosity
       # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
       VERBOSITY = LOG_INFO

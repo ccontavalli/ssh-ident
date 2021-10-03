@@ -206,6 +206,19 @@ To have multiple identities, all I have to do is:
   # keys from remaining in memory for too long.
   SSH_ADD_DEFAULT_OPTIONS = "-t 7200"
 
+  # This is optional - don't include any SSH_AGENT if you don't
+  # need it.
+  # Otherwise, provides option to change the 'ssh-agent' command for
+  # specific identities.
+  SSH_AGENT = {
+    "work": "ssh-pageant",
+  }
+
+  # This is optional - don't include any SSH_AGENT if you don't
+  # need it.
+  # Otherwise, provides option to change the 'ssh-agent' command.
+  SSH_DEFAULT_AGENT = "ssh-agent"
+
   # Output verbosity
   # valid values are: LOG_ERROR, LOG_WARN, LOG_INFO, LOG_DEBUG
   VERBOSITY = LOG_INFO
@@ -433,6 +446,9 @@ class Config(object):
       # at the documentation for more details.
       "MATCH_PATH": [],
       "MATCH_ARGV": [],
+
+      "SSH_AGENT": {},
+      "SSH_DEFAULT_AGENT": "ssh-agent",
 
       # Dictionary with identity as a key, allows to specify
       # per identity options when using ssh-add.
@@ -682,7 +698,7 @@ class AgentManager(object):
     self.config = config
     self.ssh_config = sshconfig
     self.agents_path = os.path.abspath(config.Get("DIR_AGENTS"))
-    self.agent_file = self.GetAgentFile(self.agents_path, self.identity)
+    self.agent_file = self.GetAgentFile(config, self.agents_path, self.identity)
 
   def LoadUnloadedKeys(self, keys):
     """Loads all the keys specified that are not loaded.
@@ -766,7 +782,7 @@ class AgentManager(object):
     return fingerprint
 
   @staticmethod
-  def GetAgentFile(path, identity):
+  def GetAgentFile(config, path, identity):
     """Returns the path to an agent config file.
 
     Args:
@@ -793,10 +809,13 @@ class AgentManager(object):
           loglevel=LOG_DEBUG)
       return agentfile
 
+    agent = config.Get("SSH_AGENT").get(
+        identity, config.Get("SSH_DEFAULT_AGENT")
+    )
     print("Preparing new agent for identity {0}".format(identity), file=sys.stderr,
         loglevel=LOG_DEBUG)
     retval = subprocess.call(
-        ["/usr/bin/env", "-i", "/bin/sh", "-c", "ssh-agent > {0}".format(agentfile)])
+        ["/usr/bin/env", "-i", "/bin/sh", "-c", "{0} > {1}".format(agent, agentfile)])
     return agentfile
 
   @staticmethod
