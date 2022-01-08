@@ -1,5 +1,0 @@
-ssh-ident (20140619.2318.1) unstable; urgency=low
-
-  * Setup initial debian package
-
- -- Flip Hess <flip@fliphess.com>  Thu, 19 Jun 2014 23:22:22 +0200
